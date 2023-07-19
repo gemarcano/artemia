@@ -46,7 +46,7 @@ struct scron_task
 	double minimum_voltage;
 	scron_task_function function;
 	struct scron_schedule schedule;
-	bool exact_timing;
+	time_t delta;
 };
 
 /** scron task history structure.
@@ -135,6 +135,24 @@ time_t scron_schedule_next_time(const struct scron_schedule *sched, time_t now);
  * @returns The time_t when the next scheduled event should take place. FIXME do I want to return which task too???
  */
 time_t scron_next_time(const struct scron *scron);
+
+/** Gets the scron task at the given index.
+ *
+ * @param[in,out] scron scron to query.
+ * @param[in] index Index of the task to retrieve.
+ *
+ * @returns A pointer to a task if the index is valid, NULL otherwise.
+ */
+struct scron_task *scron_get_task(struct scron *scron, size_t index);
+
+/** Gets the scron task with the given name.
+ *
+ * @param[in,out] scron scron to query.
+ * @param[in] name Name of the task to get.
+ *
+ * @returns A pointer to the task if the name was matched, NULL otherwise.
+ */
+struct scron_task *scron_get_task_by_name(struct scron *scron, const char *name);
 
 /** Callback called by save to save the key,value pair of {name: last_run}
  *  somewhere. The specific details of saving are left to the callback to

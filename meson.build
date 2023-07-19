@@ -1,4 +1,4 @@
-project('rba_scheduler', 'c',
+project('artemia', 'c',
   default_options: [
     'b_lto=true',
     'b_staticpic=false',
@@ -16,12 +16,6 @@ link_args = [
   '-Wl,--gc-sections', '-fno-exceptions',
 ]
 
-# Executables -- FIXME this is here more as an example for now...
-sources = files([
-  'src/main.c',
-  'src/scron.c',
-  'src/power_control.c',
-])
 
 # Find libm...
 cc = meson.get_compiler('c', native: false)
@@ -29,10 +23,45 @@ m_dep = cc.find_library('m', required : false)
 
 ambiq_lib = dependency('ambiq_rba_atp')
 asimple_lib = dependency('asimple_rba_atp')
+
+# library
+asimple_lib = dependency('asimple_rba_atp')
+
+lib_sources = files([
+  'src/scron.c',
+  'src/power_control.c',
+  'src/artemia.c',
+])
+
+includes = include_directories([
+  'include/artemia',
+])
+
+lib = library(meson.project_name(),
+  lib_sources,
+  dependencies: [asimple_lib], #FIXME only power_control uses asimple
+  include_directories: includes,
+  c_args: c_args,
+  link_args: link_args,
+  install: true,
+)
+
+install_subdir('include', install_dir: '')
+
+# Create a pkgconfig file
+pkg = import('pkgconfig')
+pkg.generate(lib, subdirs: ['', 'artemia'])
+
+# Executable
+sources = files([
+  'src/main.c',
+])
+
 exe = executable(meson.project_name(),
   sources,
+  link_with: lib,
   dependencies: [ambiq_lib, m_dep, asimple_lib],
-  include_directories: 'include',
+  include_directories: 'include/artemia',
   c_args: c_args,
   link_args: link_args + ['-T' + meson.source_root() / 'linker.ld']
 )

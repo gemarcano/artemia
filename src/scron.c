@@ -153,3 +153,30 @@ void scron_load(const struct scron *scron, scron_load_callback callback)
 		callback(scron->runtime_tasks.tasks[i].name, &last_run);
 	}
 }
+
+struct scron_task *scron_get_task(struct scron *scron, size_t index)
+{
+	if (index > scron_get_task_count(scron))
+		return NULL;
+
+	if (index < scron->static_tasks.size)
+		return &scron->static_tasks.tasks[index];
+	return &scron->runtime_tasks.tasks[index - scron->static_tasks.size];
+}
+
+struct scron_task *scron_get_task_by_name(struct scron *scron, const char *name)
+{
+	for (size_t i = 0; i < scron->static_tasks.size; ++i)
+	{
+		if (!strcmp(name, scron->static_tasks.tasks[i].name))
+			return &scron->static_tasks.tasks[i];
+	}
+
+	for (size_t i = 0; i < scron->runtime_tasks.size; ++i)
+	{
+		if (!strcmp(name, scron->runtime_tasks.tasks[i].name))
+			return &scron->runtime_tasks.tasks[i];
+	}
+
+	return NULL;
+}

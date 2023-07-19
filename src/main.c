@@ -3,6 +3,7 @@
 
 #include <scron.h>
 #include <power_control.h>
+#include <artemia.h>
 
 #include <adc.h>
 #include <spi.h>
@@ -111,6 +112,16 @@ static const size_t tasks_size = 2;
 
 struct uart uart;
 
+void load_callback(const char *name, time_t *last_run)
+{
+	*last_run = 1;
+}
+
+void save_callback(const char *name, time_t last_run)
+{
+
+}
+
 __attribute__((constructor))
 static void redboard_init(void)
 {
@@ -127,10 +138,13 @@ static void redboard_init(void)
 	am1815_init(&rtc, &spi);
 	initialize_time(&rtc);
 	power_control_init(&power_control, 12);
+	// FIXME remove debug
 	uart_init(&uart, UART_INST0);
+	// FIXME remove debug
 	am_util_stdio_printf("HELLO\r\n");
 
 	scron_init(&scron, &tasks);
+	scron_load(&scron, load_callback);
 
 	// After init is done, enable interrupts
 	am_hal_interrupt_master_enable();
@@ -139,59 +153,31 @@ static void redboard_init(void)
 __attribute__((destructor))
 static void redboard_shutdown(void)
 {
+	scron_save(&scron, save_callback);
 	power_control_shutdown(&power_control);
 }
 
 int main(void)
 {
-	// Prepare MCU by init-ing clock, cache, and power level operation
-	am_hal_clkgen_control(AM_HAL_CLKGEN_CONTROL_SYSCLK_MAX, 0);
-	am_hal_cachectrl_config(&am_hal_cachectrl_defaults);
-	am_hal_cachectrl_enable();
-	am_bsp_low_power_init();
-	am_hal_sysctrl_fpu_enable();
-	am_hal_sysctrl_fpu_stacking_enable(true);
-
-	spi_init(&spi, 0, 2000000);
-	spi_enable(&spi);
-	am1815_init(&rtc, &spi);
-	initialize_time(&rtc);
-	power_control_init(&power_control, 12);
-	uart_init(&uart, UART_INST0);
-	am_util_stdio_printf("HELLO\r\n");
-
-	// After init is done, enable interrupts
-	am_hal_interrupt_master_enable();
-
-	// Wait here for the ISR to grab a buffer of samples.
-	while (1)
+	for(;;)
 	{
 		// Get timestamp from RTC and last task run
-		// Get current battery voltage
+		// Get current battery voltage FIXME
 		double current_voltage = 2.0;
 		struct timeval now;
 		gettimeofday(&now, NULL);
 		time_t now_s = now.tv_sec;
+		// FIXME remove debug
 		am_util_stdio_printf("seconds: %i\r\n", (int)now.tv_sec);
+		// FIXME remove debug
 		am_util_stdio_printf("us: %i\r\n", (int)now.tv_usec);
-		// for every task, check all overdue tasks, and run the most overdue one
-		for (size_t i = 0; i < tasks_size; ++i)
+		bool ran_task = artemia_scheduler(&scron, current_voltage, now_s);
+		if (!ran_task)
 		{
-			time_t next = scron_schedule_next_time(&tasks_[i].schedule, scron.history[i].last_run);
-			if (difftime(next, now_s) <= 0 && tasks_[i].minimum_voltage >= current_voltage)
-			{
-				am_util_stdio_printf("executing %i\r\n", i);
-				// Mark for execution
-				scron.history[i].last_run = now_s;
-				tasks_[i].function(&now_s);
-				// FIXME get current voltage
-				current_voltage -= .01;
-			}
+			// Reconfigure the alarm
+			time_t next = scron_next_time(&scron);
+			// FIXME update am1815 RTC alarm
+			break;
 		}
-
-		// FIXME send shutdown signal
-
-		am_util_delay_ms(5000);
-		//am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
 	}
 }
