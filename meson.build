@@ -29,7 +29,6 @@ asimple_lib = dependency('asimple_rba_atp')
 
 lib_sources = files([
   'src/scron.c',
-  'src/power_control.c',
   'src/artemia.c',
 ])
 
@@ -39,7 +38,6 @@ includes = include_directories([
 
 lib = library(meson.project_name(),
   lib_sources,
-  dependencies: [asimple_lib], #FIXME only power_control uses asimple
   include_directories: includes,
   c_args: c_args,
   link_args: link_args,

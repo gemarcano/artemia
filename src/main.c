@@ -12,6 +12,8 @@
 #include <uart.h>
 #include <am1815.h>
 #include <syscalls.h>
+#include <flash.h>
+#include <asimple_littlefs.h>
 
 #include "am_mcu_apollo.h"
 #include "am_bsp.h"
@@ -111,6 +113,8 @@ struct scron scron;
 static const size_t tasks_size = 2;
 
 struct uart uart;
+struct asimple_littlefs fs;
+struct flash flash;
 
 void load_callback(const char *name, time_t *last_run)
 {
@@ -136,7 +140,18 @@ static void redboard_init(void)
 	spi_init(&spi, 0, 2000000);
 	spi_enable(&spi);
 	am1815_init(&rtc, &spi);
-	initialize_time(&rtc);
+	asimple_littlefs_init(&fs, &flash);
+
+	int err = asimple_littlefs_mount(&fs);
+	if (err < 0)
+	{
+		asimple_littlefs_format(&fs);
+		asimple_littlefs_mount(&fs);
+	}
+	flash_init(&flash, &spi);
+	syscalls_rtc_init(&rtc);
+	syscalls_uart_init(&uart);
+	syscalls_littlefs_init(&fs);
 	power_control_init(&power_control, 12);
 	// FIXME remove debug
 	uart_init(&uart, UART_INST0);
