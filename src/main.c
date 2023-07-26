@@ -27,37 +27,25 @@
 #include <stdio.h>
 #include <time.h>
 
-#define CHECK_ERRORS(x)\
-	if ((x) != AM_HAL_STATUS_SUCCESS)\
-	{\
-		error_handler(x);\
-	}
+static struct spi spi;
+static struct am1815 rtc;
+static struct power_control power_control;
+static struct scron scron;
+static struct uart uart;
+static struct asimple_littlefs fs;
+static struct flash flash;
 
-static void error_handler(uint32_t error)
-{
-	(void)error;
-	for(;;)
-	{
-		am_devices_led_on(am_bsp_psLEDs, 0);
-		am_util_delay_ms(500);
-		am_devices_led_off(am_bsp_psLEDs, 0);
-		am_util_delay_ms(500);
-	}
-}
-
-struct spi spi;
-struct gpio shd;
-struct am1815 rtc;
-struct power_control power_control;
-
+// Example task 1
 static int task1(void *data)
 {
+	(void)data;
 	return 0;
 }
 
 // FIXME maybe this should be the idle task
 static int task_manage_trickle(void* data)
 {
+	(void)data;
 	// Basic idea:
 	// 1. Check backup battery voltage
 	// 2. If below threshold, enable
@@ -73,6 +61,8 @@ static int task_manage_trickle(void* data)
 	}
 	return 0;
 }
+
+#define ARRAY_SIZE(array) (sizeof(array)/sizeof(*array))
 
 static struct scron_task tasks_[] = {
 	{
@@ -105,25 +95,22 @@ static struct scron_task tasks_[] = {
 
 static struct scron_tasks tasks = {
 	.tasks = tasks_,
-	.size = sizeof(tasks_)/sizeof(tasks_[0]),
+	.size = ARRAY_SIZE(tasks_),
 };
 
-struct scron scron;
-
-static const size_t tasks_size = 2;
-
-struct uart uart;
-struct asimple_littlefs fs;
-struct flash flash;
-
-void load_callback(const char *name, time_t *last_run)
+// FIXME implement loading from file
+static void load_callback(const char *name, time_t *last_run)
 {
+	(void)name;
 	*last_run = 1;
 }
 
-void save_callback(const char *name, time_t last_run)
-{
 
+// FIXME implement saving to file
+static void save_callback(const char *name, time_t last_run)
+{
+	(void)name;
+	(void)last_run;
 }
 
 __attribute__((constructor))
