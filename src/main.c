@@ -34,12 +34,99 @@ static struct scron scron;
 static struct uart uart;
 static struct asimple_littlefs fs;
 static struct flash flash;
+static struct bmp280 bmp280;
 
 // Example task 1
 static int task1(void *data)
 {
 	(void)data;
 	return 0;
+}
+
+static int task_get_temperature_data(void* data)
+{
+	(void)data;
+	// Open the file and check the header
+	spi_chip_select(&spi, SPI_CS_0);
+	char header[] = "temperature data celsius,time\r\n";
+	int len = strlen(header);
+	FILE * tfile = fopen("fs:/temperature_data.csv", "a+");
+	fseek(tfile, 0 , SEEK_SET);
+	char buffer[len];
+	fread(buffer, len, 1, tfile);
+	if(strncmp(header, buffer, len) != 0){
+		fprintf(fp, "%s", header);
+	}
+	fseek(tfile, 0, SEEK_END);
+
+	// // Read current temperature from BMP280 sensor and write to flash
+	// spi_chip_select(&spi, SPI_CS_1);
+	// uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
+    // am_util_stdio_printf("compensate_temp float version: %F\r\n", bmp280_compensate_T_double(&bmp280, raw_temp));
+	// uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
+	// spi_chip_select(&spi, SPI_CS_3);
+	// struct timeval time = am1815_read_time(&rtc);
+	// spi_chip_select(&spi, SPI_CS_0);
+	// fprintf(tfile, "%u,%lld\r\n", compensate_temp, time.tv_sec);
+
+    fclose(tfile);
+}
+
+static int task_get_pressure_data(void* data)
+{
+	(void)data;
+	// Open the file and check the header
+	spi_chip_select(&spi, SPI_CS_0);
+	char header[] = "pressure data pascals,time\r\n";
+	int len = strlen(header);
+	FILE * pfile = fopen("fs:/pressure_data.csv", "a+");
+	fseek(pfile, 0 , SEEK_SET);
+	char buffer[len];
+	fread(buffer, len, 1, pfile);
+	if(strncmp(header, buffer, len) != 0){
+		fprintf(fp, "%s", header);
+	}
+	fseek(pfile, 0, SEEK_END);
+
+	fclose(pfile);
+}
+
+static int task_get_light_data(void* data)
+{
+	(void)data;
+	// Open the file and check the header
+	spi_chip_select(&spi, SPI_CS_0);
+	char header[] = "light data ohms,time\r\n";
+	int len = strlen(header);
+	FILE * lfile = fopen("fs:/light_data.csv", "a+");
+	fseek(lfile, 0 , SEEK_SET);
+	char buffer[len];
+	fread(buffer, len, 1, lfile);
+	if(strncmp(header, buffer, len) != 0){
+		fprintf(fp, "%s", header);
+	}
+	fseek(lfile, 0, SEEK_END);
+
+	fclose(lfile);
+}
+
+static int task_get_microphone_data(void* data)
+{
+	(void)data;
+	// Open the file and check the header
+	spi_chip_select(&spi, SPI_CS_0);
+	char header[] = "microphone data Hz,time\r\n";
+	int len = strlen(header);
+	FILE * mfile = fopen("fs:/microphone_data.csv", "a+");
+	fseek(mfile, 0 , SEEK_SET);
+	char buffer[len];
+	fread(buffer, len, 1, mfile);
+	if(strncmp(header, buffer, len) != 0){
+		fprintf(fp, "%s", header);
+	}
+	fseek(mfile, 0, SEEK_END);
+
+	fclose(mfile);
 }
 
 // FIXME maybe this should be the idle task
@@ -82,6 +169,58 @@ static struct scron_task tasks_[] = {
 		.name = "task2",
 		.minimum_voltage = 2.0,
 		.function = task_manage_trickle,
+		.schedule = {
+			.month = -1,
+			.day = -1,
+			.weekday = -1,
+			.hour = -1,
+			.minute = -1,
+			.second = 30,
+		},
+	},
+	{
+		.name = "task_get_temperature_data".
+		.minimum_voltage = 2.0,
+		.function = task_get_temperature_data,
+		.schedule = {
+			.month = -1,
+			.day = -1,
+			.weekday = -1,
+			.hour = -1,
+			.minute = -1,
+			.second = 30,
+		},
+	},
+	{
+		.name = "task_get_pressure_data".
+		.minimum_voltage = 2.0,
+		.function = task_get_pressure_data,
+		.schedule = {
+			.month = -1,
+			.day = -1,
+			.weekday = -1,
+			.hour = -1,
+			.minute = -1,
+			.second = 30,
+		},
+	},
+	{
+		.name = "task_get_light_data".
+		.minimum_voltage = 2.0,
+		.function = task_get_light_data,
+		.schedule = {
+			.month = -1,
+			.day = -1,
+			.weekday = -1,
+			.hour = -1,
+			.minute = -1,
+			.second = 30,
+		},
+	},
+	{
+		.name = "task_get_microphone_data".
+		.minimum_voltage = 2.0,
+		.function = task_get_microphone_data,
 		.schedule = {
 			.month = -1,
 			.day = -1,
@@ -147,6 +286,8 @@ static void redboard_init(void)
 
 	scron_init(&scron, &tasks);
 	scron_load(&scron, load_callback);
+
+	bmp280_init(&bmp280, &spi);
 
 	// After init is done, enable interrupts
 	am_hal_interrupt_master_enable();
