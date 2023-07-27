@@ -69,7 +69,7 @@ uint32_t TestFftReal(struct fft *fft, const kiss_fft_scalar in[], kiss_fft_cpx o
       }
     }
     int freq = (bucket * fft->S)/fft->N;
-    printf("Frequency: %d\r\n", freq);
+    //printf("Frequency: %d\r\n", freq);
     return freq;
   }
   else

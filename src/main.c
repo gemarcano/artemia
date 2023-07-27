@@ -92,9 +92,11 @@ static int task_get_temperature_data(void* data)
 	fseek(tfile, 0, SEEK_END);
 
 	// Read current temperature from BMP280 sensor and write to flash
+	spi_chip_select(&spi, SPI_CS_1);
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
 	write_csv_line(tfile, compensate_temp);
+	printf("TEMP: %u\r\n", compensate_temp);
 
     fclose(tfile);
 	return 0;
@@ -122,6 +124,7 @@ static int task_get_pressure_data(void* data)
 	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
 	uint32_t compensate_press = (uint32_t) (bmp280_compensate_P_double(&bmp280, raw_press, raw_temp));
 	write_csv_line(pfile, compensate_press);
+	printf("PRESS: %u\r\n", compensate_press);
 
 	fclose(pfile);
 	return 0;
@@ -150,10 +153,11 @@ static int task_get_light_data(void* data)
 	{
 		const double reference = 1.5;
 		double voltage = adc_data * reference / ((1 << 14) - 1);
+		am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
 		resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
-		flash_wait_busy(&flash);
 	}
 	write_csv_line(lfile, resistance);
+	printf("RESISTANCE: %u\r\n", resistance);
 
 	fclose(lfile);
 	return 0;
@@ -205,6 +209,7 @@ static int task_get_microphone_data(void* data)
     }
 	// Save frequency with highest amplitude to flash
 	write_csv_line(mfile, max);
+	printf("FREQ: %u\r\n", max);
 
 	fclose(mfile);
 	return 0;
@@ -295,7 +300,7 @@ static struct scron_task tasks_[] = {
 			.weekday = -1,
 			.hour = -1,
 			.minute = -1,
-			.second = 30,
+			.second = 3,
 		},
 	},
 	{
@@ -374,6 +379,9 @@ static void redboard_init(void)
 	pdm_init(&pdm);
 	fft_init(&fft);
 
+	// Trigger the ADC to start collecting data
+	adc_trigger(&adc);
+
 	// After init is done, enable interrupts
 	am_hal_interrupt_master_enable();
 }
@@ -392,19 +400,14 @@ int main(void)
 		// Get timestamp from RTC and last task run
 		// Get current battery voltage FIXME
 		double current_voltage = 2.0;
-		//struct timeval now;
-		//gettimeofday(&now, NULL);
+		spi_chip_select(&spi, SPI_CS_3);
 		struct timeval now = am1815_read_time(&rtc);
 		time_t now_s = now.tv_sec;
 
 		uint8_t buffer[21] = {0};
 		time_to_string(buffer, (uint64_t)now_s);
-		printf("%s\r\n", buffer);
+		//printf("%s\r\n", buffer);
 
-		// FIXME remove debug
-		//am_util_stdio_printf("seconds: %i\r\n", (int)now.tv_sec);
-		// FIXME remove debug
-		//am_util_stdio_printf("us: %i\r\n", (int)now.tv_usec);
 		bool ran_task = artemia_scheduler(&scron, current_voltage, now_s);
 		if (!ran_task)
 		{
