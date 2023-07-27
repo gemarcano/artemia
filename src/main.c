@@ -97,6 +97,7 @@ static int task_get_temperature_data(void* data)
 	write_csv_line(tfile, compensate_temp);
 
     fclose(tfile);
+	return 0;
 }
 
 static int task_get_pressure_data(void* data)
@@ -123,6 +124,7 @@ static int task_get_pressure_data(void* data)
 	write_csv_line(pfile, compensate_press);
 
 	fclose(pfile);
+	return 0;
 }
 
 static int task_get_light_data(void* data)
@@ -154,6 +156,7 @@ static int task_get_light_data(void* data)
 	write_csv_line(lfile, resistance);
 
 	fclose(lfile);
+	return 0;
 }
 
 static int task_get_microphone_data(void* data)
@@ -204,6 +207,7 @@ static int task_get_microphone_data(void* data)
 	write_csv_line(mfile, max);
 
 	fclose(mfile);
+	return 0;
 }
 
 // FIXME maybe this should be the idle task
