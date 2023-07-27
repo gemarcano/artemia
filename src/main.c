@@ -149,6 +149,7 @@ static int task_get_light_data(void* data)
 	// Read current resistance of the Photo Resistor and write to flash
 	uint32_t adc_data = 0;
 	uint32_t resistance;
+	adc_trigger(&adc);
 	if (adc_get_sample(&adc, &adc_data))
 	{
 		const double reference = 1.5;
