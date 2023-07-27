@@ -30,10 +30,14 @@ asimple_lib = dependency('asimple_rba_atp')
 lib_sources = files([
   'src/scron.c',
   'src/artemia.c',
+  'src/fft.c',
+  'src/kiss_fftr.c',
+  'src/kiss_fft.c',
 ])
 
 includes = include_directories([
   'include/artemia',
+  'include/kiss_fft',
 ])
 
 lib = library(meson.project_name(),
@@ -59,7 +63,7 @@ exe = executable(meson.project_name(),
   sources,
   link_with: lib,
   dependencies: [ambiq_lib, m_dep, asimple_lib],
-  include_directories: 'include/artemia',
+  include_directories: includes,
   c_args: c_args,
   link_args: link_args + ['-T' + meson.source_root() / 'linker.ld']
 )

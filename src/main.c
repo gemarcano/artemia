@@ -14,6 +14,10 @@
 #include <syscalls.h>
 #include <flash.h>
 #include <asimple_littlefs.h>
+#include <bmp280.h>
+#include <pdm.h>
+#include <fft.h>
+#include <kiss_fftr.h>
 
 #include "am_mcu_apollo.h"
 #include "am_bsp.h"
@@ -35,6 +39,34 @@ static struct uart uart;
 static struct asimple_littlefs fs;
 static struct flash flash;
 static struct bmp280 bmp280;
+static struct adc adc;
+static struct pdm pdm;
+static struct fft fft;
+
+// Convert tv_sec, which is a long representing seconds, to a string in buffer
+// Make sure to initialize buffer before calling
+// uint8_t buffer[21] = {0};
+void time_to_string(uint8_t buffer[21], uint64_t tv_sec) {
+	// This is one way to prepare an uint64_t as a string
+	int max = ceil(log10(tv_sec));
+	uint64_t tmp = tv_sec;
+	for (uint8_t *c = buffer + max - 1; c >= buffer; --c)
+	{
+		*c = '0' + (tmp % 10);
+		tmp /= 10;
+	}
+}
+
+// Write a line to fp in the format "data,time\n"
+// Gets time from the RTC
+void write_csv_line(FILE * fp, uint32_t data) {
+	spi_chip_select(&spi, SPI_CS_3);
+	struct timeval time = am1815_read_time(&rtc);
+	spi_chip_select(&spi, SPI_CS_0);
+	uint8_t buffer[21] = {0};
+	time_to_string(buffer, (uint64_t) time.tv_sec);
+	fprintf(fp, "%s,%lu\r\n", buffer, data);
+}
 
 // Example task 1
 static int task1(void *data)
@@ -55,19 +87,14 @@ static int task_get_temperature_data(void* data)
 	char buffer[len];
 	fread(buffer, len, 1, tfile);
 	if(strncmp(header, buffer, len) != 0){
-		fprintf(fp, "%s", header);
+		fprintf(tfile, "%s", header);
 	}
 	fseek(tfile, 0, SEEK_END);
 
-	// // Read current temperature from BMP280 sensor and write to flash
-	// spi_chip_select(&spi, SPI_CS_1);
-	// uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
-    // am_util_stdio_printf("compensate_temp float version: %F\r\n", bmp280_compensate_T_double(&bmp280, raw_temp));
-	// uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
-	// spi_chip_select(&spi, SPI_CS_3);
-	// struct timeval time = am1815_read_time(&rtc);
-	// spi_chip_select(&spi, SPI_CS_0);
-	// fprintf(tfile, "%u,%lld\r\n", compensate_temp, time.tv_sec);
+	// Read current temperature from BMP280 sensor and write to flash
+	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
+	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
+	write_csv_line(tfile, compensate_temp);
 
     fclose(tfile);
 }
@@ -84,9 +111,16 @@ static int task_get_pressure_data(void* data)
 	char buffer[len];
 	fread(buffer, len, 1, pfile);
 	if(strncmp(header, buffer, len) != 0){
-		fprintf(fp, "%s", header);
+		fprintf(pfile, "%s", header);
 	}
 	fseek(pfile, 0, SEEK_END);
+
+	// Read current pressure from BMP280 sensor and write to flash
+	spi_chip_select(&spi, SPI_CS_1);
+	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
+	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
+	uint32_t compensate_press = (uint32_t) (bmp280_compensate_P_double(&bmp280, raw_press, raw_temp));
+	write_csv_line(pfile, compensate_press);
 
 	fclose(pfile);
 }
@@ -103,9 +137,21 @@ static int task_get_light_data(void* data)
 	char buffer[len];
 	fread(buffer, len, 1, lfile);
 	if(strncmp(header, buffer, len) != 0){
-		fprintf(fp, "%s", header);
+		fprintf(lfile, "%s", header);
 	}
 	fseek(lfile, 0, SEEK_END);
+
+	// Read current resistance of the Photo Resistor and write to flash
+	uint32_t adc_data = 0;
+	uint32_t resistance;
+	if (adc_get_sample(&adc, &adc_data))
+	{
+		const double reference = 1.5;
+		double voltage = adc_data * reference / ((1 << 14) - 1);
+		resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
+		flash_wait_busy(&flash);
+	}
+	write_csv_line(lfile, resistance);
 
 	fclose(lfile);
 }
@@ -122,9 +168,41 @@ static int task_get_microphone_data(void* data)
 	char buffer[len];
 	fread(buffer, len, 1, mfile);
 	if(strncmp(header, buffer, len) != 0){
-		fprintf(fp, "%s", header);
+		fprintf(mfile, "%s", header);
 	}
 	fseek(mfile, 0, SEEK_END);
+
+    // Turn on the PDM and start the first DMA transaction.
+	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
+	uint32_t handle = pdm_get_handle(&pdm);
+    am_hal_pdm_fifo_flush(handle);
+    pdm_data_get(&pdm, buffer1);
+    bool toggle = true;
+	uint32_t max = 0;
+	uint32_t N = fft_get_N(&fft);
+    while(toggle)
+    {
+        am_hal_uart_tx_flush(uart.handle);
+        am_hal_interrupt_master_disable();
+        bool ready = isPDMDataReady();
+        am_hal_interrupt_master_enable();
+        if (ready)
+        {
+            ready = false;
+			int16_t *pi16PDMData = (int16_t *)buffer;
+			// FFT transform
+			kiss_fft_scalar in[N];
+			kiss_fft_cpx out[N / 2 + 1];
+			for (uint32_t j = 0; j < N; j++){
+				in[j] = pi16PDMData[j];
+			}
+			max = TestFftReal(&fft, in, out);
+			toggle = false;
+        }
+        am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
+    }
+	// Save frequency with highest amplitude to flash
+	write_csv_line(mfile, max);
 
 	fclose(mfile);
 }
@@ -179,7 +257,7 @@ static struct scron_task tasks_[] = {
 		},
 	},
 	{
-		.name = "task_get_temperature_data".
+		.name = "task_get_temperature_data",
 		.minimum_voltage = 2.0,
 		.function = task_get_temperature_data,
 		.schedule = {
@@ -192,7 +270,7 @@ static struct scron_task tasks_[] = {
 		},
 	},
 	{
-		.name = "task_get_pressure_data".
+		.name = "task_get_pressure_data",
 		.minimum_voltage = 2.0,
 		.function = task_get_pressure_data,
 		.schedule = {
@@ -205,7 +283,7 @@ static struct scron_task tasks_[] = {
 		},
 	},
 	{
-		.name = "task_get_light_data".
+		.name = "task_get_light_data",
 		.minimum_voltage = 2.0,
 		.function = task_get_light_data,
 		.schedule = {
@@ -218,7 +296,7 @@ static struct scron_task tasks_[] = {
 		},
 	},
 	{
-		.name = "task_get_microphone_data".
+		.name = "task_get_microphone_data",
 		.minimum_voltage = 2.0,
 		.function = task_get_microphone_data,
 		.schedule = {
@@ -288,6 +366,9 @@ static void redboard_init(void)
 	scron_load(&scron, load_callback);
 
 	bmp280_init(&bmp280, &spi);
+	adc_init(&adc);
+	pdm_init(&pdm);
+	fft_init(&fft);
 
 	// After init is done, enable interrupts
 	am_hal_interrupt_master_enable();
