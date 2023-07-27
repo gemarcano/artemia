@@ -174,8 +174,7 @@ static int task_get_microphone_data(void* data)
 
     // Turn on the PDM and start the first DMA transaction.
 	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
-	uint32_t handle = pdm_get_handle(&pdm);
-    am_hal_pdm_fifo_flush(handle);
+	pdm_flush(&pdm);
     pdm_data_get(&pdm, buffer1);
     bool toggle = true;
 	uint32_t max = 0;
