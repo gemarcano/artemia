@@ -191,7 +191,7 @@ static int task_get_microphone_data(void* data)
         if (ready)
         {
             ready = false;
-			int16_t *pi16PDMData = (int16_t *)buffer;
+			int16_t *pi16PDMData = (int16_t *)buffer1;
 			// FFT transform
 			kiss_fft_scalar in[N];
 			kiss_fft_cpx out[N / 2 + 1];
@@ -344,9 +344,10 @@ static void redboard_init(void)
 	am_hal_sysctrl_fpu_enable();
 	am_hal_sysctrl_fpu_stacking_enable(true);
 
-	spi_init(&spi, 0, 2000000);
+	spi_init(&spi, 0, 2000000u);
 	spi_enable(&spi);
 	am1815_init(&rtc, &spi);
+	flash_init(&flash, &spi);
 	asimple_littlefs_init(&fs, &flash);
 
 	int err = asimple_littlefs_mount(&fs);
@@ -355,7 +356,6 @@ static void redboard_init(void)
 		asimple_littlefs_format(&fs);
 		asimple_littlefs_mount(&fs);
 	}
-	flash_init(&flash, &spi);
 	syscalls_rtc_init(&rtc);
 	syscalls_uart_init(&uart);
 	syscalls_littlefs_init(&fs);
@@ -368,6 +368,7 @@ static void redboard_init(void)
 	scron_init(&scron, &tasks);
 	scron_load(&scron, load_callback);
 
+	// Initialize the structs that weren't originally in the file
 	bmp280_init(&bmp280, &spi);
 	adc_init(&adc);
 	pdm_init(&pdm);
@@ -391,20 +392,26 @@ int main(void)
 		// Get timestamp from RTC and last task run
 		// Get current battery voltage FIXME
 		double current_voltage = 2.0;
-		struct timeval now;
-		gettimeofday(&now, NULL);
+		//struct timeval now;
+		//gettimeofday(&now, NULL);
+		struct timeval now = am1815_read_time(&rtc);
 		time_t now_s = now.tv_sec;
+
+		uint8_t buffer[21] = {0};
+		time_to_string(buffer, (uint64_t)now_s);
+		printf("%s\r\n", buffer);
+
 		// FIXME remove debug
-		am_util_stdio_printf("seconds: %i\r\n", (int)now.tv_sec);
+		//am_util_stdio_printf("seconds: %i\r\n", (int)now.tv_sec);
 		// FIXME remove debug
-		am_util_stdio_printf("us: %i\r\n", (int)now.tv_usec);
+		//am_util_stdio_printf("us: %i\r\n", (int)now.tv_usec);
 		bool ran_task = artemia_scheduler(&scron, current_voltage, now_s);
 		if (!ran_task)
 		{
 			// Reconfigure the alarm
 			time_t next = scron_next_time(&scron);
 			// FIXME update am1815 RTC alarm
-			break;
+			//break;
 		}
 	}
 }
