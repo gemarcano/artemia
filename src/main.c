@@ -31,7 +31,10 @@
 #include <stdio.h>
 #include <time.h>
 
-static struct spi spi;
+static struct spi_bus spi_bus;
+static struct spi_device flash_spi;
+static struct spi_device bmp280_spi;
+static struct spi_device rtc_spi;
 static struct am1815 rtc;
 static struct power_control power_control;
 static struct scron scron;
@@ -60,9 +63,7 @@ void time_to_string(uint8_t buffer[21], uint64_t tv_sec) {
 // Write a line to fp in the format "data,time\n"
 // Gets time from the RTC
 void write_csv_line(FILE * fp, uint32_t data) {
-	spi_chip_select(&spi, SPI_CS_3);
 	struct timeval time = am1815_read_time(&rtc);
-	spi_chip_select(&spi, SPI_CS_0);
 	uint8_t buffer[21] = {0};
 	time_to_string(buffer, (uint64_t) time.tv_sec);
 	fprintf(fp, "%s,%lu\r\n", buffer, data);
@@ -79,7 +80,6 @@ static int task_get_temperature_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	spi_chip_select(&spi, SPI_CS_0);
 	char header[] = "temperature data celsius,time\r\n";
 	int len = strlen(header);
 	FILE * tfile = fopen("fs:/temperature_data.csv", "a+");
@@ -92,7 +92,6 @@ static int task_get_temperature_data(void* data)
 	fseek(tfile, 0, SEEK_END);
 
 	// Read current temperature from BMP280 sensor and write to flash
-	spi_chip_select(&spi, SPI_CS_1);
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
 	write_csv_line(tfile, compensate_temp);
@@ -106,7 +105,6 @@ static int task_get_pressure_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	spi_chip_select(&spi, SPI_CS_0);
 	char header[] = "pressure data pascals,time\r\n";
 	int len = strlen(header);
 	FILE * pfile = fopen("fs:/pressure_data.csv", "a+");
@@ -119,7 +117,6 @@ static int task_get_pressure_data(void* data)
 	fseek(pfile, 0, SEEK_END);
 
 	// Read current pressure from BMP280 sensor and write to flash
-	spi_chip_select(&spi, SPI_CS_1);
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
 	uint32_t compensate_press = (uint32_t) (bmp280_compensate_P_double(&bmp280, raw_press, raw_temp));
@@ -134,7 +131,6 @@ static int task_get_light_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	spi_chip_select(&spi, SPI_CS_0);
 	char header[] = "light data ohms,time\r\n";
 	int len = strlen(header);
 	FILE * lfile = fopen("fs:/light_data.csv", "a+");
@@ -168,7 +164,6 @@ static int task_get_microphone_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	spi_chip_select(&spi, SPI_CS_0);
 	char header[] = "microphone data Hz,time\r\n";
 	int len = strlen(header);
 	FILE * mfile = fopen("fs:/microphone_data.csv", "a+");
@@ -350,10 +345,13 @@ static void redboard_init(void)
 	am_hal_sysctrl_fpu_enable();
 	am_hal_sysctrl_fpu_stacking_enable(true);
 
-	spi_init(&spi, 0, 2000000u);
-	spi_enable(&spi);
-	am1815_init(&rtc, &spi);
-	flash_init(&flash, &spi);
+	spi_bus_init(&spi_bus, 0);
+	spi_bus_enable(&spi_bus);
+	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_0, 4000000u);
+	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 4000000u);
+	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
+	am1815_init(&rtc, &rtc_spi);
+	flash_init(&flash, &flash_spi);
 	asimple_littlefs_init(&fs, &flash);
 
 	int err = asimple_littlefs_mount(&fs);
@@ -375,7 +373,7 @@ static void redboard_init(void)
 	scron_load(&scron, load_callback);
 
 	// Initialize the structs that weren't originally in the file
-	bmp280_init(&bmp280, &spi);
+	bmp280_init(&bmp280, &bmp280_spi);
 	adc_init(&adc);
 	pdm_init(&pdm);
 	fft_init(&fft);
@@ -401,7 +399,6 @@ int main(void)
 		// Get timestamp from RTC and last task run
 		// Get current battery voltage FIXME
 		double current_voltage = 2.0;
-		spi_chip_select(&spi, SPI_CS_3);
 		struct timeval now = am1815_read_time(&rtc);
 		time_t now_s = now.tv_sec;
 
