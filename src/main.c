@@ -80,7 +80,7 @@ static int task_get_temperature_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	char header[] = "temperature data celsius,time\r\n";
+	char header[] = "time,temperature data celsius\r\n";
 	int len = strlen(header);
 	FILE * tfile = fopen("fs:/temperature_data.csv", "a+");
 	fseek(tfile, 0 , SEEK_SET);
@@ -105,7 +105,7 @@ static int task_get_pressure_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	char header[] = "pressure data pascals,time\r\n";
+	char header[] = "time,pressure data pascals\r\n";
 	int len = strlen(header);
 	FILE * pfile = fopen("fs:/pressure_data.csv", "a+");
 	fseek(pfile, 0 , SEEK_SET);
@@ -131,7 +131,7 @@ static int task_get_light_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	char header[] = "light data ohms,time\r\n";
+	char header[] = "time,light data ohms\r\n";
 	int len = strlen(header);
 	FILE * lfile = fopen("fs:/light_data.csv", "a+");
 	fseek(lfile, 0 , SEEK_SET);
@@ -164,7 +164,7 @@ static int task_get_microphone_data(void* data)
 {
 	(void)data;
 	// Open the file and check the header
-	char header[] = "microphone data Hz,time\r\n";
+	char header[] = "time,microphone data Hz\r\n";
 	int len = strlen(header);
 	FILE * mfile = fopen("fs:/microphone_data.csv", "a+");
 	fseek(mfile, 0 , SEEK_SET);
