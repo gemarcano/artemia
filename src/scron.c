@@ -10,31 +10,34 @@
 time_t scron_schedule_next_time(const struct scron_schedule *sched, time_t now)
 {
 	struct tm next = *gmtime(&now);
-	if (sched->second > 0)
+	if (sched->hour >= 0)
 	{
-		next.tm_sec += sched->second;
+		int diff = (sched->hour - next.tm_hour) * 3600;
+		if (diff < 0)
+		{
+			diff += 3600 * 24;
+		}
+		now += diff;
 	}
-	if (sched->minute > 0)
+	if (sched->minute >= 0)
 	{
-		next.tm_min += sched->minute;
+		int diff = (sched->minute - next.tm_min) * 60;
+		if (diff < 0)
+		{
+			diff += 3600;
+		}
+		now += diff;
 	}
-	if (sched->hour > 0)
+	if (sched->second >= 0)
 	{
-		next.tm_hour += sched->hour;
+		int diff = (sched->second - next.tm_sec);
+		if (diff < 0)
+		{
+			diff += 60;
+		}
+		now += diff;
 	}
-	if (sched->weekday > 0)
-	{
-		next.tm_wday += sched->weekday;
-	}
-	if (sched->day > 0)
-	{
-		next.tm_mday += sched->day;
-	}
-	if (sched->month > 0)
-	{
-		next.tm_mon += sched->month;
-	}
-	return mktime(&next);
+	return now;
 }
 
 void scron_init(struct scron *scron, struct scron_tasks *static_tasks)
@@ -100,11 +103,6 @@ time_t scron_next_time(const struct scron *scron)
 		return 0;
 
 	time_t result;
-	if (scron->static_tasks.size)
-		result = scron_schedule_next_time(&scron->static_tasks.tasks[0].schedule, scron->history[0].last_run);
-	else // Because count != 0, if we're here, we know we have runtime tasks
-		result = scron_schedule_next_time(&scron->runtime_tasks.tasks[0].schedule, scron->history[0].last_run);
-
 	for (size_t i = 0; i < scron->static_tasks.size; ++i)
 	{
 		time_t last_run = scron->history[i].last_run;

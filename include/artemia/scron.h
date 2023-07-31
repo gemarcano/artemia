@@ -20,9 +20,6 @@ typedef int (*scron_task_function)(void *data);
  */
 struct scron_schedule
 {
-	int8_t month;
-	int8_t day;
-	int8_t weekday;
 	int8_t hour;
 	int8_t minute;
 	int8_t second;
