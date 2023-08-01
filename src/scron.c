@@ -9,35 +9,41 @@
 
 time_t scron_schedule_next_time(const struct scron_schedule *sched, time_t now)
 {
-	struct tm next = *gmtime(&now);
+	time_t next = now;
+	struct tm now_tm = *gmtime(&now);
 	if (sched->hour >= 0)
 	{
-		int diff = (sched->hour - next.tm_hour) * 3600;
+		int diff = (sched->hour - now_tm.tm_hour) * 3600;
 		if (diff < 0)
 		{
 			diff += 3600 * 24;
 		}
-		now += diff;
+		next += diff;
 	}
 	if (sched->minute >= 0)
 	{
-		int diff = (sched->minute - next.tm_min) * 60;
+		int diff = (sched->minute - now_tm.tm_min) * 60;
 		if (diff < 0)
 		{
 			diff += 3600;
 		}
-		now += diff;
+		next += diff;
 	}
 	if (sched->second >= 0)
 	{
-		int diff = (sched->second - next.tm_sec);
+		int diff = (sched->second - now_tm.tm_sec);
 		if (diff < 0)
 		{
 			diff += 60;
 		}
-		now += diff;
+		next += diff;
 	}
-	return now;
+	// If everything is negative, trigger the next second
+	if (now == next)
+	{
+		next++;
+	}
+	return next;
 }
 
 void scron_init(struct scron *scron, struct scron_tasks *static_tasks)
