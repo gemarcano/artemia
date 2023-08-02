@@ -143,16 +143,17 @@ static int task_get_light_data(void* data)
 	fseek(lfile, 0, SEEK_END);
 
 	// Read current resistance of the Photo Resistor and write to flash
-	uint32_t adc_data = 0;
+	uint32_t adc_data[1] = {0};
+	uint8_t pins[] = {16};
 	uint32_t resistance;
+
 	adc_trigger(&adc);
-	if (adc_get_sample(&adc, &adc_data))
-	{
-		const double reference = 1.5;
-		double voltage = adc_data * reference / ((1 << 14) - 1);
-		am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
-		resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
-	}
+	while (!(adc_get_sample(&adc, adc_data, pins, 1)));
+	const double reference = 1.5;
+	double voltage = adc_data[0] * reference / ((1 << 14) - 1);
+	am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
+	resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
+	
 	write_csv_line(lfile, resistance);
 	printf("RESISTANCE: %u\r\n", resistance);
 
@@ -356,7 +357,8 @@ static void redboard_init(void)
 
 	// Initialize the structs that weren't originally in the file
 	bmp280_init(&bmp280, &bmp280_spi);
-	adc_init(&adc);
+	uint8_t pins[] = {16};
+	adc_init(&adc, pins, 1);
 	pdm_init(&pdm);
 	fft_init(&fft);
 
