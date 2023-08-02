@@ -148,7 +148,9 @@ static int task_get_light_data(void* data)
 	uint32_t resistance;
 
 	adc_trigger(&adc);
-	while (!(adc_get_sample(&adc, adc_data, pins, 1)));
+	while (!(adc_get_sample(&adc, adc_data, pins, 1))){
+		am_util_stdio_printf("you shouldn't be here\r\n");
+	}
 	const double reference = 1.5;
 	double voltage = adc_data[0] * reference / ((1 << 14) - 1);
 	am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
@@ -282,7 +284,7 @@ static struct scron_task tasks_[] = {
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
-			.second = 3,
+			.second = 30,
 		},
 	},
 	{
@@ -330,7 +332,7 @@ static void redboard_init(void)
 
 	spi_bus_init(&spi_bus, 0);
 	spi_bus_enable(&spi_bus);
-	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_0, 4000000u);
+	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_2, 4000000u);
 	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 4000000u);
 	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
 	am1815_init(&rtc, &rtc_spi);
