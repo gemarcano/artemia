@@ -155,7 +155,7 @@ static int task_get_light_data(void* data)
 	double voltage = adc_data[0] * reference / ((1 << 14) - 1);
 	am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
 	resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
-	
+
 	write_csv_line(lfile, resistance);
 	printf("RESISTANCE: %u\r\n", resistance);
 
@@ -348,7 +348,7 @@ static void redboard_init(void)
 	syscalls_rtc_init(&rtc);
 	syscalls_uart_init(&uart);
 	syscalls_littlefs_init(&fs);
-	power_control_init(&power_control, 12);
+	power_control_init(&power_control, 42, 43);
 	// FIXME remove debug
 	uart_init(&uart, UART_INST0);
 	// FIXME remove debug
