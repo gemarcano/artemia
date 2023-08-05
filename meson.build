@@ -21,12 +21,7 @@ link_args = [
 cc = meson.get_compiler('c', native: false)
 m_dep = cc.find_library('m', required : false)
 
-ambiq_lib = dependency('ambiq_rba_atp')
-asimple_lib = dependency('asimple_rba_atp')
-
 # library
-asimple_lib = dependency('asimple_rba_atp')
-
 lib_sources = files([
   'src/scron.c',
   'src/artemia.c',
@@ -42,6 +37,7 @@ includes = include_directories([
 
 lib = library(meson.project_name(),
   lib_sources,
+  dependencies: [m_dep],
   include_directories: includes,
   c_args: c_args,
   link_args: link_args,
@@ -54,33 +50,46 @@ install_subdir('include', install_dir: '')
 pkg = import('pkgconfig')
 pkg.generate(lib, subdirs: ['', 'artemia'])
 
-# Executable
-sources = files([
-  'src/main.c',
-])
+system = 'none'
+cpu_family = 'arm'
+cpu = 'cortex-m4'
+endian = 'little'
 
-exe = executable(meson.project_name(),
-  sources,
-  link_with: lib,
-  dependencies: [ambiq_lib, m_dep, asimple_lib],
-  include_directories: includes,
-  c_args: c_args,
-  link_args: link_args + ['-T' + meson.source_root() / 'linker.ld']
-)
+# Only create the executable if the target is something resembling the RedBoard
+if (host_machine.system() == 'none' and host_machine.cpu_family() == 'arm' and
+    host_machine.cpu() == 'cortex-m4')
+  # Executable
+  sources = files([
+    'src/main.c',
+  ])
 
-# Custom flash target, to make it easier to program the RedBoard, requires
-# objcopy
-objcopy = find_program('objcopy')
+  ambiq_lib = dependency('ambiq_rba_atp')
+  asimple_lib = dependency('asimple_rba_atp')
 
-bin = custom_target(
-  input : exe,
-  output : exe.name().split('.')[0] + '.bin',
-  command : [objcopy, '-O', 'binary', '@INPUT@', '@OUTPUT@', ],
-  build_by_default: true
-)
 
-run_target('flash',
-  command : ['python3', meson.source_root() / 'svl.py',
-    get_option('tty'), '-f',  bin, '-b', '921600', '-v'],
-  depends : bin,
-)
+  exe = executable(meson.project_name(),
+    sources,
+    link_with: lib,
+    dependencies: [ambiq_lib, m_dep, asimple_lib],
+    include_directories: includes,
+    c_args: c_args,
+    link_args: link_args + ['-T' + meson.source_root() / 'linker.ld']
+  )
+
+  # Custom flash target, to make it easier to program the RedBoard, requires
+  # objcopy
+  objcopy = find_program('objcopy')
+
+  bin = custom_target(
+    input : exe,
+    output : exe.name().split('.')[0] + '.bin',
+    command : [objcopy, '-O', 'binary', '@INPUT@', '@OUTPUT@', ],
+    build_by_default: true
+  )
+
+  run_target('flash',
+    command : ['python3', meson.source_root() / 'svl.py',
+      get_option('tty'), '-f',  bin, '-b', '921600', '-v'],
+    depends : bin,
+  )
+endif
