@@ -244,9 +244,9 @@ static int task_manage_trickle(void* data)
 #define ARRAY_SIZE(array) (sizeof(array)/sizeof(*array))
 
 static struct scron_task tasks_[] = {
-	{
+	/*{
 		.name = "task1",
-		.minimum_voltage = 2.0,
+		.minimum_voltage = 0,
 		.function = task1,
 		.schedule = {
 			.hour = -1,
@@ -256,27 +256,27 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task2",
-		.minimum_voltage = 2.0,
+		.minimum_voltage = 0,
 		.function = task_manage_trickle,
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
 			.second = 30,
 		},
-	},
+	},*/
 	{
 		.name = "task_get_temperature_data",
-		.minimum_voltage = 2.0,
+		.minimum_voltage = 0,
 		.function = task_get_temperature_data,
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
 			.second = 30,
 		},
-	},
+	},/*
 	{
 		.name = "task_get_pressure_data",
-		.minimum_voltage = 2.0,
+		.minimum_voltage = 0,
 		.function = task_get_pressure_data,
 		.schedule = {
 			.hour = -1,
@@ -286,7 +286,7 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_light_data",
-		.minimum_voltage = 2.0,
+		.minimum_voltage = 0,
 		.function = task_get_light_data,
 		.schedule = {
 			.hour = -1,
@@ -296,14 +296,14 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_microphone_data",
-		.minimum_voltage = 2.0,
+		.minimum_voltage = 0,
 		.function = task_get_microphone_data,
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
 			.second = 30,
 		},
-	},
+	},*/
 };
 
 static struct scron_tasks tasks = {
@@ -430,13 +430,16 @@ int main(void)
 {
 	for(;;)
 	{
-		// Get timestamp from RTC and last task run
+		// Request sample from ADC, and while that's happening fetch the time
+		// from the RTC
+		adc_trigger(&adc);
+		struct timeval now;
+		gettimeofday(&now, NULL);
 		uint32_t adc_data[2] = {0};
 		uint8_t pins[] = {VRTC_PIN, VADP_PIN};
-		adc_trigger(&adc);
 		while (!(adc_get_sample(&adc, adc_data, pins, ARRAY_SIZE(pins))));
+
 		double current_voltage = convert_adc_voltage(adc_data[1]);
-		struct timeval now = am1815_read_time(&rtc);
 		time_t now_s = now.tv_sec;
 
 		bool ran_task = artemia_scheduler(&scron, current_voltage, now_s);
