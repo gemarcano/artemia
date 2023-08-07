@@ -216,10 +216,19 @@ static int task_get_microphone_data(void* data)
 
 #define ARRAY_SIZE(array) (sizeof(array)/sizeof(*array))
 
+/*
+ * Measured minimum voltages for each task:
+ *  - temperature: 1.40
+ *  - pressure: 1.85
+ *  - light: 1.69
+ *  - microphone: 2.08
+ *
+ *  Going to add some headroom to all of them.
+ */
 static struct scron_task tasks_[] = {
 	{
 		.name = "task_get_temperature_data",
-		.minimum_voltage = 1.40,
+		.minimum_voltage = 1.8,
 		.function = task_get_temperature_data,
 		.schedule = {
 			.hour = -1,
@@ -229,7 +238,7 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_pressure_data",
-		.minimum_voltage = 1.85,
+		.minimum_voltage = 1.9,
 		.function = task_get_pressure_data,
 		.schedule = {
 			.hour = -1,
@@ -239,7 +248,7 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_light_data",
-		.minimum_voltage = 1.69,
+		.minimum_voltage = 1.8,
 		.function = task_get_light_data,
 		.schedule = {
 			.hour = -1,
@@ -249,7 +258,7 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_microphone_data",
-		.minimum_voltage = 2.08,
+		.minimum_voltage = 2.10,
 		.function = task_get_microphone_data,
 		.schedule = {
 			.hour = -1,
@@ -409,7 +418,7 @@ int main(void)
 			time_t next = scron_next_time(&scron);
 			struct timeval tv = { .tv_sec = next, };
 			am1815_write_alarm(&rtc, &tv);
-			// FIXME we need to adjust the alarm's repeat function
+			am1815_repeat_alarm(&rtc, 5); // Repeat every hour
 			break;
 		}
 	}
