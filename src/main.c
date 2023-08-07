@@ -76,13 +76,6 @@ void write_csv_line(FILE * fp, uint32_t data) {
 	fprintf(fp, "%s,%lu\r\n", buffer, data);
 }
 
-// Example task 1
-static int task1(void *data)
-{
-	(void)data;
-	return 0;
-}
-
 static int task_get_temperature_data(void* data)
 {
 	(void)data;
@@ -221,33 +214,13 @@ static int task_get_microphone_data(void* data)
 	return 0;
 }
 
-// FIXME maybe this should be the idle task
-static int task_manage_trickle(void* data)
-{
-	(void)data;
-	// Basic idea:
-	// 1. Check backup battery voltage
-	// 2. If below threshold, enable
-	// 3. If above threshold, disable
-	double backup_voltage = 2.0; // FIXME sense
-	if (backup_voltage < 1.8)
-	{
-		am1815_enable_trickle(&rtc);
-	}
-	else if (backup_voltage > 1.9)
-	{
-		am1815_disable_trickle(&rtc);
-	}
-	return 0;
-}
-
 #define ARRAY_SIZE(array) (sizeof(array)/sizeof(*array))
 
 static struct scron_task tasks_[] = {
-	/*{
-		.name = "task1",
-		.minimum_voltage = 0,
-		.function = task1,
+	{
+		.name = "task_get_temperature_data",
+		.minimum_voltage = 1.40,
+		.function = task_get_temperature_data,
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
@@ -255,28 +228,8 @@ static struct scron_task tasks_[] = {
 		},
 	},
 	{
-		.name = "task2",
-		.minimum_voltage = 0,
-		.function = task_manage_trickle,
-		.schedule = {
-			.hour = -1,
-			.minute = -1,
-			.second = 30,
-		},
-	},*/
-	{
-		.name = "task_get_temperature_data",
-		.minimum_voltage = 0,
-		.function = task_get_temperature_data,
-		.schedule = {
-			.hour = -1,
-			.minute = -1,
-			.second = 30,
-		},
-	},/*
-	{
 		.name = "task_get_pressure_data",
-		.minimum_voltage = 0,
+		.minimum_voltage = 1.85,
 		.function = task_get_pressure_data,
 		.schedule = {
 			.hour = -1,
@@ -286,7 +239,7 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_light_data",
-		.minimum_voltage = 0,
+		.minimum_voltage = 1.69,
 		.function = task_get_light_data,
 		.schedule = {
 			.hour = -1,
@@ -296,14 +249,14 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_microphone_data",
-		.minimum_voltage = 0,
+		.minimum_voltage = 2.08,
 		.function = task_get_microphone_data,
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
 			.second = 30,
 		},
-	},*/
+	},
 };
 
 static struct scron_tasks tasks = {
@@ -367,6 +320,7 @@ static void save_callback(const char *name, time_t last_run)
 __attribute__((constructor))
 static void redboard_init(void)
 {
+	power_control_init(&power_control, 42, 43);
 	// Prepare MCU by init-ing clock, cache, and power level operation
 	am_hal_clkgen_control(AM_HAL_CLKGEN_CONTROL_SYSCLK_MAX, 0);
 	am_hal_cachectrl_config(&am_hal_cachectrl_defaults);
@@ -374,13 +328,16 @@ static void redboard_init(void)
 	am_bsp_low_power_init();
 	am_hal_sysctrl_fpu_enable();
 	am_hal_sysctrl_fpu_stacking_enable(true);
-	power_control_init(&power_control, 42, 43);
+
+	// After basic init is done, enable interrupts
+	am_hal_interrupt_master_enable();
 
 	spi_bus_init(&spi_bus, 0);
 	spi_bus_enable(&spi_bus);
 	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_2, 24000000u);
 	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 4000000u);
 	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
+
 	am1815_init(&rtc, &rtc_spi);
 	flash_init(&flash, &flash_spi);
 	asimple_littlefs_init(&fs, &flash);
@@ -391,10 +348,14 @@ static void redboard_init(void)
 		asimple_littlefs_format(&fs);
 		asimple_littlefs_mount(&fs);
 	}
+
 	uart_init(&uart, UART_INST0);
+
 	bmp280_init(&bmp280, &bmp280_spi);
+
 	uint8_t pins[] = {PHOTORES_PIN, VADP_PIN, VRTC_PIN};
 	adc_init(&adc, pins, ARRAY_SIZE(pins));
+
 	pdm_init(&pdm);
 	fft_init(&fft);
 
@@ -405,11 +366,10 @@ static void redboard_init(void)
 	syscalls_uart_init(&uart);
 	syscalls_littlefs_init(&fs);
 
-	// After init is done, enable interrupts
-	am_hal_interrupt_master_enable();
 
 	scron_init(&scron, &tasks);
 	scron_load(&scron, load_callback);
+
 }
 
 __attribute__((destructor))

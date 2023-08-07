@@ -149,8 +149,6 @@ void scron_load(const struct scron *scron, scron_load_callback callback)
 	{
 		time_t *last_run = &scron->history[i].last_run;
 		callback(scron->static_tasks.tasks[i].name, last_run);
-		// TESTING ONLY FIXME HACK to force the task to run every boot
-		*last_run = 0;
 	}
 
 	for (size_t i = 0; i < scron->runtime_tasks.size; ++i)
