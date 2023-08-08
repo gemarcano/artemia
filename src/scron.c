@@ -169,14 +169,10 @@ void scron_save(const struct scron *scron, scron_save_callback callback)
 
 void scron_load(const struct scron *scron, scron_load_callback callback)
 {
-	//FIXME HACK
-	//For experiment 1, set last run to way back in the past, to make sure all tasks run.
 	for (size_t i = 0; i < scron->static_tasks.size; ++i)
 	{
-		// FIXME HACK
 		time_t *last_run = &scron->history[i].last_run;
 		callback(scron->static_tasks.tasks[i].name, last_run);
-		*last_run -= 40000;
 	}
 
 	for (size_t i = 0; i < scron->runtime_tasks.size; ++i)
