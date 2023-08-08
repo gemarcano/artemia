@@ -352,6 +352,13 @@ static void redboard_init(void)
 	am1815_init(&rtc, &rtc_spi);
 	// Configure Alarm pulse to shortest, just in case, and enable it
 	am1815_enable_alarm_interrupt(&rtc, AM1815_SHORTEST);
+	// If set, clear oscillator failure bit, ensure we're running off crystal
+	// and not RC
+	uint8_t OF = am1815_read_register(&rtc, 0x1D);
+    uint8_t OFmask = 0b00000010;
+    uint8_t OFresult = OF & ~OFmask;
+    am1815_write_register(&rtc, 0x1D, OFresult);
+
 	flash_init(&flash, &flash_spi);
 	asimple_littlefs_init(&fs, &flash);
 
@@ -412,6 +419,9 @@ int main(void)
 		//
 		// This is a FIXME for testing purposes only-- if the last_run
 		// timestamp is ahead of now, move now to that timestamp
+		// We avoid issues with falsifying data by comparing timestamps with
+		// events logged through other means, e.g. power traces from
+		// RocketLogger
 		{
 			size_t scron_history = scron_get_task_count(&scron);
 			time_t update_time = 0;
