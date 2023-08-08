@@ -6,10 +6,24 @@
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
+
+//FIXME DEBUG
+#include <stdio.h>
 
 time_t scron_schedule_next_time(const struct scron_schedule *sched, time_t now)
 {
 	time_t next = now;
+	// If everything is negative, trigger the next second
+	if (sched->second < 0 && sched->minute < 0 && sched->hour < 0)
+	{
+		// FIXME the next second is too agressive-- empirically we are constantly missing it
+		next += 5;
+		return next;
+	}
+
+	// From here on out, we know we don't have all sched components as
+	// negatives
 	struct tm now_tm = *gmtime(&now);
 	if (sched->hour >= 0)
 	{
@@ -38,10 +52,19 @@ time_t scron_schedule_next_time(const struct scron_schedule *sched, time_t now)
 		}
 		next += diff;
 	}
-	// If everything is negative, trigger the next second
+
+	// FIXME is the better approach to take in last_ran as an argument and
+	// compare for equality?
 	if (now == next)
 	{
-		next++;
+		// Figure out which is the lowest denomination that's negative, and add
+		// its time in seconds -- we just ran
+		if (sched->second < 0)
+			next += 5; // FIXME we can't do one second...
+		else if (sched->minute < 0)
+			next += 60;
+		else if (sched->hour < 0)
+			next += 3600;
 	}
 	return next;
 }
@@ -108,11 +131,12 @@ time_t scron_next_time(const struct scron *scron)
 	if (!count)
 		return 0;
 
-	time_t result;
+	time_t result = INT_MAX; // FIXME is there a better maximum??? Also the standard makes no assumptions
 	for (size_t i = 0; i < scron->static_tasks.size; ++i)
 	{
 		time_t last_run = scron->history[i].last_run;
 		time_t next = scron_schedule_next_time(&scron->static_tasks.tasks[i].schedule, last_run);
+		printf("scron: %s last: %lu next: %lu\r\n", scron->static_tasks.tasks[i].name, (uint32_t)last_run, (uint32_t)next);
 		if (result > next)
 			result = next;
 	}

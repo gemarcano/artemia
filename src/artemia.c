@@ -7,6 +7,9 @@
 #include <stdbool.h>
 #include <time.h>
 
+// FIXME HACK testing printf
+#include <stdio.h>
+
 bool artemia_scheduler(struct scron *scron, double voltage, time_t now)
 {
 	const size_t task_count = scron_get_task_count(scron);
@@ -24,6 +27,7 @@ bool artemia_scheduler(struct scron *scron, double voltage, time_t now)
 			// we're within that delta from the schedule
 			if (diff >= 0.0 && (task->delta <= 0 || task->delta > diff))
 			{
+				printf("running: %s, last: %lu, next: %lu, now: %lu, diff: %lu\r\n", task->name, (uint32_t)last_run, (uint32_t)next_run, (uint32_t)now, (uint32_t)diff);
 				task->function(&now);
 				// After the task, update history
 				scron->history[i].last_run = now;

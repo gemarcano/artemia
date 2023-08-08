@@ -224,6 +224,8 @@ static int task_get_microphone_data(void* data)
  *  - microphone: 2.08
  *
  *  Going to add some headroom to all of them.
+ *  One caveat-- we can't set a minimum above 2.0, as that's the maximum our
+ *  ADC can detect
  */
 static struct scron_task tasks_[] = {
 	{
@@ -233,7 +235,7 @@ static struct scron_task tasks_[] = {
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
-			.second = 30,
+			.second = 10,
 		},
 	},
 	{
@@ -243,7 +245,7 @@ static struct scron_task tasks_[] = {
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
-			.second = 30,
+			.second = 20,
 		},
 	},
 	{
@@ -258,12 +260,12 @@ static struct scron_task tasks_[] = {
 	},
 	{
 		.name = "task_get_microphone_data",
-		.minimum_voltage = 2.10,
+		.minimum_voltage = 2.00,
 		.function = task_get_microphone_data,
 		.schedule = {
 			.hour = -1,
 			.minute = -1,
-			.second = 30,
+			.second = 40,
 		},
 	},
 };
@@ -348,6 +350,8 @@ static void redboard_init(void)
 	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
 
 	am1815_init(&rtc, &rtc_spi);
+	// Configure Alarm pulse to shortest, just in case, and enable it
+	am1815_enable_alarm_interrupt(&rtc, AM1815_SHORTEST);
 	flash_init(&flash, &flash_spi);
 	asimple_littlefs_init(&fs, &flash);
 
@@ -379,6 +383,7 @@ static void redboard_init(void)
 	scron_init(&scron, &tasks);
 	scron_load(&scron, load_callback);
 
+
 }
 
 __attribute__((destructor))
@@ -404,6 +409,27 @@ int main(void)
 		adc_trigger(&adc);
 		struct timeval now;
 		gettimeofday(&now, NULL);
+		//
+		// This is a FIXME for testing purposes only-- if the last_run
+		// timestamp is ahead of now, move now to that timestamp
+		{
+			size_t scron_history = scron_get_task_count(&scron);
+			time_t update_time = 0;
+			for (size_t i = 0; i < scron_history; ++i)
+			{
+				if (scron.history[i].last_run > now.tv_sec)
+					update_time = scron.history[i].last_run;
+			}
+			if (update_time)
+			{
+				now.tv_sec = update_time;
+				am1815_write_time(&rtc, &now);
+				//gettimeofday(&now, NULL);
+				now = am1815_read_time(&rtc);
+			}
+		}
+		// end of FIXME
+		//
 		uint32_t adc_data[2] = {0};
 		uint8_t pins[] = {VRTC_PIN, VADP_PIN};
 		while (!(adc_get_sample(&adc, adc_data, pins, ARRAY_SIZE(pins))));
@@ -414,11 +440,18 @@ int main(void)
 		bool ran_task = artemia_scheduler(&scron, current_voltage, now_s);
 		if (!ran_task)
 		{
+			// Time is stale here, as task could have taken non-negligible time
+			// to run
+			gettimeofday(&now, NULL);
+			struct tm tm;
+			gmtime_r(&now.tv_sec, &tm);
+			printf("current seconds: %lu\r\n", (uint32_t)tm.tm_sec);
 			// Reconfigure the alarm
 			time_t next = scron_next_time(&scron);
+			printf("next alarm in: %lu\r\n", (uint32_t)(next - now.tv_sec));
 			struct timeval tv = { .tv_sec = next, };
 			am1815_write_alarm(&rtc, &tv);
-			am1815_repeat_alarm(&rtc, 5); // Repeat every hour
+			am1815_repeat_alarm(&rtc, 6); // Repeat every FIXME minute
 			break;
 		}
 	}
