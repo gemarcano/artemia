@@ -352,6 +352,8 @@ static void redboard_init(void)
 	am1815_init(&rtc, &rtc_spi);
 	// Configure Alarm pulse to shortest, just in case, and enable it
 	am1815_enable_alarm_interrupt(&rtc, AM1815_SHORTEST);
+	//FIXME HACK experiment 1, while we're on, don't alarm us
+	am1815_disable_alarm_interrupt(&rtc);
 	// If set, clear oscillator failure bit, ensure we're running off crystal
 	// and not RC
 	uint8_t OF = am1815_read_register(&rtc, 0x1D);
@@ -461,7 +463,8 @@ int main(void)
 			printf("next alarm in: %lu\r\n", (uint32_t)(next - now.tv_sec));
 			struct timeval tv = { .tv_sec = next, };
 			am1815_write_alarm(&rtc, &tv);
-			am1815_repeat_alarm(&rtc, 6); // Repeat every FIXME minute
+			am1815_repeat_alarm(&rtc, 7); // Repeat every FIXME second
+			am1815_enable_alarm_interrupt(&rtc, AM1815_SHORTEST);
 			break;
 		}
 	}
