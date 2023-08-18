@@ -18,6 +18,7 @@
 #include <pdm.h>
 #include <fft.h>
 #include <kiss_fftr.h>
+#include <systick.h>
 
 #include "am_mcu_apollo.h"
 #include "am_bsp.h"
@@ -78,6 +79,8 @@ void write_csv_line(FILE * fp, uint32_t data) {
 
 static int task_get_temperature_data(void* data)
 {
+	uint64_t start = systick_jiffies();
+
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,temperature data celsius\r\n";
@@ -98,11 +101,19 @@ static int task_get_temperature_data(void* data)
 	printf("TEMP: %"PRIu32"\r\n", compensate_temp);
 
     fclose(tfile);
+
+	uint64_t end = systick_jiffies();
+
+	am_util_stdio_printf("start of temperature: %llu", start);
+	am_util_stdio_printf("end of temperature: %llu", end);
+
 	return 0;
 }
 
 static int task_get_pressure_data(void* data)
 {
+	uint64_t start = systick_jiffies();
+
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,pressure data pascals\r\n";
@@ -124,11 +135,19 @@ static int task_get_pressure_data(void* data)
 	printf("PRESS: %"PRIu32"\r\n", compensate_press);
 
 	fclose(pfile);
+
+	uint64_t end = systick_jiffies();
+
+	am_util_stdio_printf("start of pressure: %llu", start);
+	am_util_stdio_printf("end of pressure: %llu", end);
+
 	return 0;
 }
 
 static int task_get_light_data(void* data)
 {
+	uint64_t start = systick_jiffies();
+
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,light data ohms\r\n";
@@ -160,11 +179,19 @@ static int task_get_light_data(void* data)
 	printf("RESISTANCE: %"PRIu32"\r\n", resistance);
 
 	fclose(lfile);
+
+	uint64_t end = systick_jiffies();
+	
+	am_util_stdio_printf("start of light: %llu", systick_jiffies());
+	am_util_stdio_printf("end of light: %llu", systick_jiffies());
+
 	return 0;
 }
 
 static int task_get_microphone_data(void* data)
 {
+	uint64_t start = systick_jiffies();
+
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,microphone data Hz\r\n";
@@ -211,6 +238,12 @@ static int task_get_microphone_data(void* data)
 	printf("FREQ: %"PRIu32"\r\n", max);
 
 	fclose(mfile);
+
+	uint64_t end = systick_jiffies();
+
+	am_util_stdio_printf("start of microphone: %llu", start);
+	am_util_stdio_printf("end of microphone: %llu", end);
+
 	return 0;
 }
 
@@ -390,7 +423,9 @@ static void redboard_init(void)
 	scron_init(&scron, &tasks);
 	scron_load(&scron, load_callback);
 
-
+	// initialize systick
+	systick_reset();
+	systick_start();
 }
 
 __attribute__((destructor))
