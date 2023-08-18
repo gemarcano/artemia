@@ -87,6 +87,9 @@ static int task_get_temperature_data(void* data)
 	int len = strlen(header);
 	FILE * tfile = fopen("fs:/temperature_data.csv", "a+");
 	fseek(tfile, 0 , SEEK_SET);
+
+	uint64_t time1 = systick_jiffies();
+
 	char buffer[len];
 	fread(buffer, len, 1, tfile);
 	if(strncmp(header, buffer, len) != 0){
@@ -95,17 +98,28 @@ static int task_get_temperature_data(void* data)
 	fseek(tfile, 0, SEEK_END);
 
 	// Read current temperature from BMP280 sensor and write to flash
+	uint64_t before_temp = systick_jiffies();
+
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
+
+	uint64_t after_temp = systick_jiffies();
+
 	write_csv_line(tfile, compensate_temp);
-	printf("TEMP: %"PRIu32"\r\n", compensate_temp);
+	// printf("TEMP: %"PRIu32"\r\n", compensate_temp);
+
+	uint64_t time2 = systick_jiffies();
 
     fclose(tfile);
 
 	uint64_t end = systick_jiffies();
 
-	am_util_stdio_printf("start of temperature: %llu", start);
-	am_util_stdio_printf("end of temperature: %llu", end);
+	am_util_stdio_printf("start of temperature: %llu\r\n", start);
+	am_util_stdio_printf("time1: %llu\r\n", time1);
+	am_util_stdio_printf("before reading temp: %llu\r\n", before_temp);
+	am_util_stdio_printf("after reading temp: %llu\r\n", after_temp);
+	am_util_stdio_printf("time2: %llu\r\n", time2);
+	am_util_stdio_printf("end of temperature: %llu\r\n", end);
 
 	return 0;
 }
@@ -132,14 +146,14 @@ static int task_get_pressure_data(void* data)
 	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
 	uint32_t compensate_press = (uint32_t) (bmp280_compensate_P_double(&bmp280, raw_press, raw_temp));
 	write_csv_line(pfile, compensate_press);
-	printf("PRESS: %"PRIu32"\r\n", compensate_press);
+	// printf("PRESS: %"PRIu32"\r\n", compensate_press);
 
 	fclose(pfile);
 
 	uint64_t end = systick_jiffies();
 
-	am_util_stdio_printf("start of pressure: %llu", start);
-	am_util_stdio_printf("end of pressure: %llu", end);
+	am_util_stdio_printf("start of pressure: %llu\r\n", start);
+	am_util_stdio_printf("end of pressure: %llu\r\n", end);
 
 	return 0;
 }
@@ -168,22 +182,22 @@ static int task_get_light_data(void* data)
 
 	adc_trigger(&adc);
 	while (!(adc_get_sample(&adc, adc_data, pins, 1))){
-		am_util_stdio_printf("you shouldn't be here\r\n");
+		// am_util_stdio_printf("you shouldn't be here\r\n");
 	}
 	const double reference = 2.0;
 	double voltage = adc_data[0] * reference / ((1 << 14) - 1);
-	am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
+	// am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
 	resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
 
 	write_csv_line(lfile, resistance);
-	printf("RESISTANCE: %"PRIu32"\r\n", resistance);
+	// printf("RESISTANCE: %"PRIu32"\r\n", resistance);
 
 	fclose(lfile);
 
 	uint64_t end = systick_jiffies();
 	
-	am_util_stdio_printf("start of light: %llu", systick_jiffies());
-	am_util_stdio_printf("end of light: %llu", systick_jiffies());
+	am_util_stdio_printf("start of light: %llu\r\n", systick_jiffies());
+	am_util_stdio_printf("end of light: %llu\r\n", systick_jiffies());
 
 	return 0;
 }
@@ -235,14 +249,14 @@ static int task_get_microphone_data(void* data)
     }
 	// Save frequency with highest amplitude to flash
 	write_csv_line(mfile, max);
-	printf("FREQ: %"PRIu32"\r\n", max);
+	// printf("FREQ: %"PRIu32"\r\n", max);
 
 	fclose(mfile);
 
 	uint64_t end = systick_jiffies();
 
-	am_util_stdio_printf("start of microphone: %llu", start);
-	am_util_stdio_printf("end of microphone: %llu", end);
+	am_util_stdio_printf("start of microphone: %llu\r\n", start);
+	am_util_stdio_printf("end of microphone: %llu\r\n", end);
 
 	return 0;
 }
