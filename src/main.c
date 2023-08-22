@@ -178,34 +178,29 @@ static int task_get_microphone_data(void* data)
 	}
 	fseek(mfile, 0, SEEK_END);
 
-    // Turn on the PDM and start the first DMA transaction.
+	// Turn on the PDM and start the first DMA transaction.
 	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
 	pdm_flush(&pdm);
-    pdm_data_get(&pdm, buffer1);
-    bool toggle = true;
+	pdm_data_get(&pdm, buffer1);
+	while(!isPDMDataReady())
+	{
+		am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
+	}
+
 	uint32_t max = 0;
 	uint32_t N = fft_get_N(&fft);
-    while(toggle)
-    {
-        am_hal_uart_tx_flush(uart.handle);
-        am_hal_interrupt_master_disable();
-        bool ready = isPDMDataReady();
-        am_hal_interrupt_master_enable();
-        if (ready)
-        {
-            ready = false;
-			int16_t *pi16PDMData = (int16_t *)buffer1;
-			// FFT transform
-			kiss_fft_scalar in[N];
-			kiss_fft_cpx out[N / 2 + 1];
-			for (uint32_t j = 0; j < N; j++){
-				in[j] = pi16PDMData[j];
-			}
-			max = TestFftReal(&fft, in, out);
-			toggle = false;
-        }
-        am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
-    }
+	if (isPDMDataReady())
+	{
+		int16_t *pi16PDMData = (int16_t *)buffer1;
+		// FFT transform
+		kiss_fft_scalar in[N];
+		kiss_fft_cpx out[N / 2 + 1];
+		for (uint32_t j = 0; j < N; j++){
+			in[j] = pi16PDMData[j];
+		}
+		max = TestFftReal(&fft, in, out);
+	}
+
 	// Save frequency with highest amplitude to flash
 	write_csv_line(mfile, max);
 	printf("FREQ: %"PRIu32"\r\n", max);
