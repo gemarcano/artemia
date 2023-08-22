@@ -88,8 +88,6 @@ static int task_get_temperature_data(void* data)
 	FILE * tfile = fopen("fs:/temperature_data.csv", "a+");
 	fseek(tfile, 0 , SEEK_SET);
 
-	uint64_t time1 = systick_jiffies();
-
 	char buffer[len];
 	fread(buffer, len, 1, tfile);
 	if(strncmp(header, buffer, len) != 0){
@@ -98,12 +96,10 @@ static int task_get_temperature_data(void* data)
 	fseek(tfile, 0, SEEK_END);
 
 	// Read current temperature from BMP280 sensor and write to flash
-	uint64_t before_temp = systick_jiffies();
+	uint64_t time1 = systick_jiffies();
 
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
-
-	uint64_t after_temp = systick_jiffies();
 
 	write_csv_line(tfile, compensate_temp);
 	// printf("TEMP: %"PRIu32"\r\n", compensate_temp);
@@ -116,8 +112,6 @@ static int task_get_temperature_data(void* data)
 
 	am_util_stdio_printf("start of temperature: %llu\r\n", start);
 	am_util_stdio_printf("time1: %llu\r\n", time1);
-	am_util_stdio_printf("before reading temp: %llu\r\n", before_temp);
-	am_util_stdio_printf("after reading temp: %llu\r\n", after_temp);
 	am_util_stdio_printf("time2: %llu\r\n", time2);
 	am_util_stdio_printf("end of temperature: %llu\r\n", end);
 
@@ -141,6 +135,8 @@ static int task_get_pressure_data(void* data)
 	}
 	fseek(pfile, 0, SEEK_END);
 
+	uint64_t time1 = systick_jiffies();
+
 	// Read current pressure from BMP280 sensor and write to flash
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
@@ -148,11 +144,15 @@ static int task_get_pressure_data(void* data)
 	write_csv_line(pfile, compensate_press);
 	// printf("PRESS: %"PRIu32"\r\n", compensate_press);
 
+	uint64_t time2 = systick_jiffies();
+
 	fclose(pfile);
 
 	uint64_t end = systick_jiffies();
 
 	am_util_stdio_printf("start of pressure: %llu\r\n", start);
+	am_util_stdio_printf("time1: %llu\r\n", time1);
+	am_util_stdio_printf("time2: %llu\r\n", time2);
 	am_util_stdio_printf("end of pressure: %llu\r\n", end);
 
 	return 0;
@@ -175,6 +175,8 @@ static int task_get_light_data(void* data)
 	}
 	fseek(lfile, 0, SEEK_END);
 
+	uint64_t time1 = systick_jiffies();
+
 	// Read current resistance of the Photo Resistor and write to flash
 	uint32_t adc_data[1] = {0};
 	uint8_t pins[] = {PHOTORES_PIN};
@@ -192,12 +194,16 @@ static int task_get_light_data(void* data)
 	write_csv_line(lfile, resistance);
 	// printf("RESISTANCE: %"PRIu32"\r\n", resistance);
 
+	uint64_t time2 = systick_jiffies();
+
 	fclose(lfile);
 
 	uint64_t end = systick_jiffies();
 	
-	am_util_stdio_printf("start of light: %llu\r\n", systick_jiffies());
-	am_util_stdio_printf("end of light: %llu\r\n", systick_jiffies());
+	am_util_stdio_printf("start of light: %llu\r\n", start);
+	am_util_stdio_printf("time1: %llu\r\n", time1);
+	am_util_stdio_printf("time2: %llu\r\n", time2);
+	am_util_stdio_printf("end of light: %llu\r\n", end);
 
 	return 0;
 }
@@ -219,17 +225,29 @@ static int task_get_microphone_data(void* data)
 	}
 	fseek(mfile, 0, SEEK_END);
 
+	uint64_t time1 = systick_jiffies();
+
 	// Turn on the PDM and start the first DMA transaction.
 	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
+	memset(buffer1, 2, PDM_SIZE * sizeof(uint32_t));
 	pdm_flush(&pdm);
 	pdm_data_get(&pdm, buffer1);
 	while(!isPDMDataReady())
 	{
-		am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
+		// am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
 	}
 
 	uint32_t max = 0;
 	uint32_t N = fft_get_N(&fft);
+
+	uint16_t i;
+	for (i = 0; i < PDM_SIZE; i++) {
+		if (buffer1[i] == 0x02020202) {
+			printf("%d\r\n", i);
+			break;
+		}
+	}
+
 	if (isPDMDataReady())
 	{
 		int16_t *pi16PDMData = (int16_t *)buffer1;
@@ -246,11 +264,15 @@ static int task_get_microphone_data(void* data)
 	write_csv_line(mfile, max);
 	// printf("FREQ: %"PRIu32"\r\n", max);
 
+	uint64_t time2 = systick_jiffies();
+
 	fclose(mfile);
 
 	uint64_t end = systick_jiffies();
 
 	am_util_stdio_printf("start of microphone: %llu\r\n", start);
+	am_util_stdio_printf("time1: %llu\r\n", time1);
+	am_util_stdio_printf("time2: %llu\r\n", time2);
 	am_util_stdio_printf("end of microphone: %llu\r\n", end);
 
 	return 0;
@@ -270,6 +292,16 @@ static int task_get_microphone_data(void* data)
  *  ADC can detect
  */
 static struct scron_task tasks_[] = {
+	{
+		.name = "task_get_light_data",
+		.minimum_voltage = 1.8,
+		.function = task_get_light_data,
+		.schedule = {
+			.hour = -1,
+			.minute = -1,
+			.second = 30,
+		},
+	},
 	{
 		.name = "task_get_temperature_data",
 		.minimum_voltage = 1.8,
@@ -388,7 +420,7 @@ static void redboard_init(void)
 	spi_bus_init(&spi_bus, 0);
 	spi_bus_enable(&spi_bus);
 	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_2, 24000000u);
-	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 4000000u);
+	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 10000000u);
 	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
 
 	am1815_init(&rtc, &rtc_spi);
