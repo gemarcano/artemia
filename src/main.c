@@ -18,6 +18,8 @@
 #include <pdm.h>
 #include <fft.h>
 #include <kiss_fftr.h>
+#include <systick.h>
+#include <lora.h>
 
 #include "am_mcu_apollo.h"
 #include "am_bsp.h"
@@ -33,9 +35,11 @@
 #include <inttypes.h>
 
 static struct spi_bus spi_bus;
+static struct spi_bus spi_bus_2;
 static struct spi_device flash_spi;
 static struct spi_device bmp280_spi;
 static struct spi_device rtc_spi;
+static struct spi_device lora_spi;
 static struct am1815 rtc;
 static struct power_control power_control;
 static struct scron scron;
@@ -48,6 +52,8 @@ static struct gpio adc_enable_vadp;
 static struct gpio adc_enable_vrtc;
 static struct pdm pdm;
 static struct fft fft;
+static struct lora lora;
+static struct gpio lora_dio0;
 
 static const uint8_t PHOTORES_PIN = 16;
 static const uint8_t VADP_PIN = 29;
@@ -84,6 +90,7 @@ static int task_get_temperature_data(void* data)
 	int len = strlen(header);
 	FILE * tfile = fopen("fs:/temperature_data.csv", "a+");
 	fseek(tfile, 0 , SEEK_SET);
+
 	char buffer[len];
 	fread(buffer, len, 1, tfile);
 	if(strncmp(header, buffer, len) != 0){
@@ -94,10 +101,10 @@ static int task_get_temperature_data(void* data)
 	// Read current temperature from BMP280 sensor and write to flash
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
-	write_csv_line(tfile, compensate_temp);
-	printf("TEMP: %"PRIu32"\r\n", compensate_temp);
 
+	write_csv_line(tfile, compensate_temp);
     fclose(tfile);
+
 	return 0;
 }
 
@@ -121,9 +128,9 @@ static int task_get_pressure_data(void* data)
 	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
 	uint32_t compensate_press = (uint32_t) (bmp280_compensate_P_double(&bmp280, raw_press, raw_temp));
 	write_csv_line(pfile, compensate_press);
-	printf("PRESS: %"PRIu32"\r\n", compensate_press);
 
 	fclose(pfile);
+
 	return 0;
 }
 
@@ -149,17 +156,17 @@ static int task_get_light_data(void* data)
 
 	adc_trigger(&adc);
 	while (!(adc_get_sample(&adc, adc_data, pins, 1))){
-		am_util_stdio_printf("you shouldn't be here\r\n");
+		// am_util_stdio_printf("you shouldn't be here\r\n");
 	}
 	const double reference = 2.0;
 	double voltage = adc_data[0] * reference / ((1 << 14) - 1);
-	am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
+	// am_util_stdio_printf("VOLTAGE: %f\r\n", voltage);
 	resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
 
 	write_csv_line(lfile, resistance);
-	printf("RESISTANCE: %"PRIu32"\r\n", resistance);
 
 	fclose(lfile);
+
 	return 0;
 }
 
@@ -180,6 +187,7 @@ static int task_get_microphone_data(void* data)
 
 	// Turn on the PDM and start the first DMA transaction.
 	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
+	memset(buffer1, 2, PDM_SIZE * sizeof(uint32_t));
 	pdm_flush(&pdm);
 	pdm_data_get(&pdm, buffer1);
 	while(!isPDMDataReady())
@@ -203,9 +211,27 @@ static int task_get_microphone_data(void* data)
 
 	// Save frequency with highest amplitude to flash
 	write_csv_line(mfile, max);
-	printf("FREQ: %"PRIu32"\r\n", max);
-
 	fclose(mfile);
+
+	return 0;
+}
+
+static int task_send_lora(void* data)
+{	
+	(void)data;
+	//set status gpio pin to low (i.e. we are doing stuff now)
+	gpio_set(&lora_dio0, false);  //TODO
+	
+	unsigned char buffer[] = "Hello World! :)";
+
+	lora_send_packet(&lora, buffer, strlen(buffer));
+	
+	//set status gpio pin to high (i.e. we are done sending packet now)
+	gpio_set(&lora_dio0, true);  //TODO
+	am_util_delay_ms(1000);		//wait 1 second
+
+	printf("done sending\r\n");
+
 	return 0;
 }
 
@@ -261,6 +287,16 @@ static struct scron_task tasks_[] = {
 			.hour = -1,
 			.minute = -1,
 			.second = 40,
+		},
+	},
+	{
+		.name = "task_send_lora",
+		.minimum_voltage = 1.8,
+		.function = task_send_lora,
+		.schedule = {
+			.hour = -1,
+			.minute = -1,
+			.second = 50,
 		},
 	},
 };
@@ -339,10 +375,20 @@ static void redboard_init(void)
 	am_hal_interrupt_master_enable();
 
 	spi_bus_init(&spi_bus, 0);
+	spi_bus_init(&spi_bus_2, 1);
 	spi_bus_enable(&spi_bus);
+	spi_bus_enable(&spi_bus_2);
 	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_2, 24000000u);
-	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 4000000u);
+	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 10000000u);
 	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
+	spi_bus_init_device(&spi_bus_2, &lora_spi, SPI_CS_0, 1000000u);
+	
+	lora_init(&lora, &lora_spi, 915000000, 23);
+	gpio_init(&lora_dio0, 23, GPIO_MODE_INPUT, 0);
+	lora_standby(&lora);
+	lora_set_spreading_factor(&lora, 7);
+	lora_set_coding_rate(&lora, 1);
+	lora_set_bandwidth(&lora, 0x7);
 
 	am1815_init(&rtc, &rtc_spi);
 	// Configure Alarm pulse to shortest, just in case, and enable it
@@ -381,11 +427,12 @@ static void redboard_init(void)
 	syscalls_uart_init(&uart);
 	syscalls_littlefs_init(&fs);
 
-
 	scron_init(&scron, &tasks);
 	scron_load(&scron, load_callback);
 
-
+	// initialize systick
+	systick_reset();
+	systick_start();
 }
 
 __attribute__((destructor))
@@ -393,6 +440,7 @@ static void redboard_shutdown(void)
 {
 	gpio_set(&adc_enable_vrtc, false);
 	gpio_set(&adc_enable_vadp, false);
+	gpio_set(&lora_dio0, false);
 	scron_save(&scron, save_callback);
 	power_control_shutdown(&power_control);
 }
