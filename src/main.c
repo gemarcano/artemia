@@ -84,8 +84,6 @@ void write_csv_line(FILE * fp, uint32_t data) {
 
 static int task_get_temperature_data(void* data)
 {
-	uint64_t start = systick_jiffies();
-
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,temperature data celsius\r\n";
@@ -101,32 +99,17 @@ static int task_get_temperature_data(void* data)
 	fseek(tfile, 0, SEEK_END);
 
 	// Read current temperature from BMP280 sensor and write to flash
-	uint64_t time1 = systick_jiffies();
-
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t compensate_temp = (uint32_t) (bmp280_compensate_T_double(&bmp280, raw_temp) * 1000);
 
 	write_csv_line(tfile, compensate_temp);
-	// printf("TEMP: %"PRIu32"\r\n", compensate_temp);
-
-	uint64_t time2 = systick_jiffies();
-
     fclose(tfile);
-
-	uint64_t end = systick_jiffies();
-
-	am_util_stdio_printf("start of temperature: %llu\r\n", start);
-	am_util_stdio_printf("time1: %llu\r\n", time1);
-	am_util_stdio_printf("time2: %llu\r\n", time2);
-	am_util_stdio_printf("end of temperature: %llu\r\n", end);
 
 	return 0;
 }
 
 static int task_get_pressure_data(void* data)
 {
-	uint64_t start = systick_jiffies();
-
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,pressure data pascals\r\n";
@@ -140,33 +123,19 @@ static int task_get_pressure_data(void* data)
 	}
 	fseek(pfile, 0, SEEK_END);
 
-	uint64_t time1 = systick_jiffies();
-
 	// Read current pressure from BMP280 sensor and write to flash
 	uint32_t raw_temp = bmp280_get_adc_temp(&bmp280);
 	uint32_t raw_press = bmp280_get_adc_pressure(&bmp280);
 	uint32_t compensate_press = (uint32_t) (bmp280_compensate_P_double(&bmp280, raw_press, raw_temp));
 	write_csv_line(pfile, compensate_press);
-	// printf("PRESS: %"PRIu32"\r\n", compensate_press);
-
-	uint64_t time2 = systick_jiffies();
 
 	fclose(pfile);
-
-	uint64_t end = systick_jiffies();
-
-	am_util_stdio_printf("start of pressure: %llu\r\n", start);
-	am_util_stdio_printf("time1: %llu\r\n", time1);
-	am_util_stdio_printf("time2: %llu\r\n", time2);
-	am_util_stdio_printf("end of pressure: %llu\r\n", end);
 
 	return 0;
 }
 
 static int task_get_light_data(void* data)
 {
-	uint64_t start = systick_jiffies();
-
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,light data ohms\r\n";
@@ -179,8 +148,6 @@ static int task_get_light_data(void* data)
 		fprintf(lfile, "%s", header);
 	}
 	fseek(lfile, 0, SEEK_END);
-
-	uint64_t time1 = systick_jiffies();
 
 	// Read current resistance of the Photo Resistor and write to flash
 	uint32_t adc_data[1] = {0};
@@ -197,26 +164,14 @@ static int task_get_light_data(void* data)
 	resistance = (uint32_t)((10000 * voltage)/(3.3 - voltage));
 
 	write_csv_line(lfile, resistance);
-	// printf("RESISTANCE: %"PRIu32"\r\n", resistance);
-
-	uint64_t time2 = systick_jiffies();
 
 	fclose(lfile);
-
-	uint64_t end = systick_jiffies();
-	
-	am_util_stdio_printf("start of light: %llu\r\n", start);
-	am_util_stdio_printf("time1: %llu\r\n", time1);
-	am_util_stdio_printf("time2: %llu\r\n", time2);
-	am_util_stdio_printf("end of light: %llu\r\n", end);
 
 	return 0;
 }
 
 static int task_get_microphone_data(void* data)
 {
-	uint64_t start = systick_jiffies();
-
 	(void)data;
 	// Open the file and check the header
 	char header[] = "time,microphone data Hz\r\n";
@@ -230,8 +185,6 @@ static int task_get_microphone_data(void* data)
 	}
 	fseek(mfile, 0, SEEK_END);
 
-	uint64_t time1 = systick_jiffies();
-
 	// Turn on the PDM and start the first DMA transaction.
 	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
 	memset(buffer1, 2, PDM_SIZE * sizeof(uint32_t));
@@ -239,19 +192,11 @@ static int task_get_microphone_data(void* data)
 	pdm_data_get(&pdm, buffer1);
 	while(!isPDMDataReady())
 	{
-		// am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
+		am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
 	}
 
 	uint32_t max = 0;
 	uint32_t N = fft_get_N(&fft);
-
-	uint16_t i;
-	for (i = 0; i < PDM_SIZE; i++) {
-		if (buffer1[i] == 0x02020202) {
-			printf("%d\r\n", i);
-			break;
-		}
-	}
 
 	if (isPDMDataReady())
 	{
@@ -267,46 +212,27 @@ static int task_get_microphone_data(void* data)
 
 	// Save frequency with highest amplitude to flash
 	write_csv_line(mfile, max);
-	// printf("FREQ: %"PRIu32"\r\n", max);
-
-	uint64_t time2 = systick_jiffies();
-
 	fclose(mfile);
-
-	uint64_t end = systick_jiffies();
-
-	am_util_stdio_printf("start of microphone: %llu\r\n", start);
-	am_util_stdio_printf("time1: %llu\r\n", time1);
-	am_util_stdio_printf("time2: %llu\r\n", time2);
-	am_util_stdio_printf("end of microphone: %llu\r\n", end);
 
 	return 0;
 }
 
 static int task_send_lora(void* data)
-{
-	while (1)
-	{		
-		//set status gpio pin to low (i.e. we are doing stuff now)
-		gpio_set(&lora_dio0, false);  //TODO
-		
-		unsigned char buffer = "Hello World! :)";
+{	
+	(void)data;
+	//set status gpio pin to low (i.e. we are doing stuff now)
+	gpio_set(&lora_dio0, false);  //TODO
+	
+	unsigned char buffer[] = "Hello World! :)";
 
-		lora_send_packet(&lora, buffer, strlen(buffer));
-		if (lora_rx_amount(&lora))
-		{
-			am_util_stdio_printf("length %i\r\n", lora_rx_amount(&lora));
-			lora_receive_packet(&lora, buffer, 32);
-			am_util_stdio_printf("Data: %s\r\n", buffer);
-		}
-		
-		//set status gpio pin to high (i.e. we are done sending packet now)
-		gpio_set(&lora_dio0, true);  //TODO
-		am_util_delay_ms(1000);		//wait 1 second
+	lora_send_packet(&lora, buffer, strlen(buffer));
+	
+	//set status gpio pin to high (i.e. we are done sending packet now)
+	gpio_set(&lora_dio0, true);  //TODO
+	am_util_delay_ms(1000);		//wait 1 second
 
-		// Sleep here until the next ADC interrupt comes along.
-		am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
-	}
+	printf("done sending\r\n");
+
 	return 0;
 }
 
