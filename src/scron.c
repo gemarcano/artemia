@@ -180,18 +180,6 @@ void scron_load(const struct scron *scron, scron_load_callback callback)
 		time_t *last_run = &scron->history[i].last_run;
 		callback(scron->runtime_tasks.tasks[i].name, last_run);
 	}
-
-	for (size_t i = 0; i < scron->static_tasks.size; ++i)
-	{
-		time_t *last_run = &scron->history[i].last_run;
-		callback(scron->static_tasks.tasks[i].name, last_run);
-	}
-
-	for (size_t i = 0; i < scron->runtime_tasks.size; ++i)
-	{
-		time_t *last_run = &scron->history[i].last_run;
-		callback(scron->runtime_tasks.tasks[i].name, last_run);
-	}
 }
 
 struct scron_task *scron_get_task(struct scron *scron, size_t index)
