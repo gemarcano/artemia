@@ -197,7 +197,6 @@ static int task_get_microphone_data(void* data)
 
 	uint32_t max = 0;
 	uint32_t N = fft_get_N(&fft);
-
 	if (isPDMDataReady())
 	{
 		int16_t *pi16PDMData = (int16_t *)buffer1;
