@@ -19,7 +19,6 @@
 #include <fft.h>
 #include <kiss_fftr.h>
 #include <systick.h>
-#include <lora.h>
 
 #include "am_mcu_apollo.h"
 #include "am_bsp.h"
@@ -34,26 +33,26 @@
 #include <time.h>
 #include <inttypes.h>
 
-static struct spi_bus spi_bus;
-static struct spi_bus spi_bus_2;
-static struct spi_device flash_spi;
-static struct spi_device bmp280_spi;
-static struct spi_device rtc_spi;
-static struct spi_device lora_spi;
+static struct spi_bus *spi_bus;
+static struct spi_bus *spi_bus_2;
+static struct spi_device *flash_spi;
+static struct spi_device *bmp280_spi;
+static struct spi_device *rtc_spi;
+static struct spi_device *lora_spi;
 static struct am1815 rtc;
 static struct power_control power_control;
 static struct scron scron;
-static struct uart uart;
+static struct uart *uart;
 static struct asimple_littlefs fs;
 static struct flash flash;
 static struct bmp280 bmp280;
 static struct adc adc;
 static struct gpio adc_enable_vadp;
 static struct gpio adc_enable_vrtc;
-static struct pdm pdm;
+static struct gpio lora_enable;
+static struct pdm *pdm;
 static struct fft fft;
 static struct lora lora;
-static struct gpio lora_dio0;
 
 static const uint8_t PHOTORES_PIN = 16;
 static const uint8_t VADP_PIN = 29;
@@ -186,10 +185,10 @@ static int task_get_microphone_data(void* data)
 	fseek(mfile, 0, SEEK_END);
 
 	// Turn on the PDM and start the first DMA transaction.
-	uint32_t* buffer1 = pdm_get_buffer1(&pdm);
+	uint32_t* buffer1 = pdm_get_buffer1(pdm);
 	memset(buffer1, 2, PDM_SIZE * sizeof(uint32_t));
-	pdm_flush(&pdm);
-	pdm_data_get(&pdm, buffer1);
+	pdm_flush(pdm);
+	pdm_data_get(pdm, buffer1);
 	while(!isPDMDataReady())
 	{
 		am_hal_sysctrl_sleep(AM_HAL_SYSCTRL_SLEEP_DEEP);
@@ -217,17 +216,12 @@ static int task_get_microphone_data(void* data)
 }
 
 static int task_send_lora(void* data)
-{	
+{
 	(void)data;
-	//set status gpio pin to low (i.e. we are doing stuff now)
-	gpio_set(&lora_dio0, false);  //TODO
-	
 	unsigned char buffer[] = "Hello World! :)";
 
-	lora_send_packet(&lora, buffer, strlen(buffer));
-	
-	//set status gpio pin to high (i.e. we are done sending packet now)
-	gpio_set(&lora_dio0, true);  //TODO
+	lora_send_packet(&lora, buffer, strlen((const char*)buffer));
+
 	am_util_delay_ms(1000);		//wait 1 second
 
 	printf("done sending\r\n");
@@ -374,23 +368,28 @@ static void redboard_init(void)
 	// After basic init is done, enable interrupts
 	am_hal_interrupt_master_enable();
 
-	spi_bus_init(&spi_bus, 0);
-	spi_bus_init(&spi_bus_2, 1);
-	spi_bus_enable(&spi_bus);
-	spi_bus_enable(&spi_bus_2);
-	spi_bus_init_device(&spi_bus, &flash_spi, SPI_CS_2, 24000000u);
-	spi_bus_init_device(&spi_bus, &bmp280_spi, SPI_CS_1, 10000000u);
-	spi_bus_init_device(&spi_bus, &rtc_spi, SPI_CS_3, 2000000u);
-	spi_bus_init_device(&spi_bus_2, &lora_spi, SPI_CS_0, 1000000u);
-	
-	lora_init(&lora, &lora_spi, 915000000, 23);
-	gpio_init(&lora_dio0, 23, GPIO_MODE_INPUT, 0);
+	spi_bus = spi_bus_get_instance(SPI_BUS_0);
+	spi_bus_2 = spi_bus_get_instance(SPI_BUS_1);
+	spi_bus_enable(spi_bus);
+	flash_spi = spi_device_get_instance(spi_bus, SPI_CS_2, 24000000u);
+	bmp280_spi = spi_device_get_instance(spi_bus, SPI_CS_1, 10000000u);
+	rtc_spi = spi_device_get_instance(spi_bus, SPI_CS_3, 2000000u);
+	lora_spi = spi_device_get_instance(spi_bus_2, SPI_CS_0, 1000000u);
+
+	// FIXME wouldn't it be better to turn on LoRa later?
+	// Don't turn on SPI bus unless you want the LoRa device to power itself
+	// from it, unless you turn on the main power for the device first.
+	gpio_init(&lora_enable, 40, GPIO_MODE_OUTPUT, 1);
+	// Per datasheet, it takes 10ms for the LoRa module to be ready.
+	am_util_delay_ms(10);
+	spi_bus_enable(spi_bus_2);
+	lora_init(&lora, lora_spi, 915000000, 23);
 	lora_standby(&lora);
 	lora_set_spreading_factor(&lora, 7);
 	lora_set_coding_rate(&lora, 1);
 	lora_set_bandwidth(&lora, 0x7);
 
-	am1815_init(&rtc, &rtc_spi);
+	am1815_init(&rtc, rtc_spi);
 	// Configure Alarm pulse to shortest, just in case, and enable it
 	am1815_enable_alarm_interrupt(&rtc, AM1815_SHORTEST);
 	// If set, clear oscillator failure bit, ensure we're running off crystal
@@ -400,7 +399,7 @@ static void redboard_init(void)
     uint8_t OFresult = OF & ~OFmask;
     am1815_write_register(&rtc, 0x1D, OFresult);
 
-	flash_init(&flash, &flash_spi);
+	flash_init(&flash, flash_spi);
 	asimple_littlefs_init(&fs, &flash);
 
 	int err = asimple_littlefs_mount(&fs);
@@ -410,21 +409,21 @@ static void redboard_init(void)
 		asimple_littlefs_mount(&fs);
 	}
 
-	uart_init(&uart, UART_INST0);
+	uart = uart_get_instance(UART_INST0);
 
-	bmp280_init(&bmp280, &bmp280_spi);
+	bmp280_init(&bmp280, bmp280_spi);
 
 	uint8_t pins[] = {PHOTORES_PIN, VADP_PIN, VRTC_PIN};
 	adc_init(&adc, pins, ARRAY_SIZE(pins));
 
-	pdm_init(&pdm);
+	pdm = pdm_get_instance();
 	fft_init(&fft);
 
 	gpio_init(&adc_enable_vrtc, 0, GPIO_MODE_OUTPUT, 1);
 	gpio_init(&adc_enable_vadp, 1, GPIO_MODE_OUTPUT, 1);
 
 	syscalls_rtc_init(&rtc);
-	syscalls_uart_init(&uart);
+	syscalls_uart_init(uart);
 	syscalls_littlefs_init(&fs);
 
 	scron_init(&scron, &tasks);
@@ -438,9 +437,9 @@ static void redboard_init(void)
 __attribute__((destructor))
 static void redboard_shutdown(void)
 {
+	gpio_set(&lora_enable, false);
 	gpio_set(&adc_enable_vrtc, false);
 	gpio_set(&adc_enable_vadp, false);
-	gpio_set(&lora_dio0, false);
 	scron_save(&scron, save_callback);
 	power_control_shutdown(&power_control);
 }
